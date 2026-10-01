@@ -33,6 +33,22 @@ export interface CelestialBody {
   scale?: number
   /** 自转速度（可选，弧度/帧） */
   rotationSpeed?: number
+  /** 可视化半径（千米，可选，用于相对比例提示） */
+  radiusKm?: number
+  /** 相对于太阳的平均距离（千米，可选，便于在场景中按比例摆放） */
+  distanceFromSunKm?: number
+  /** 相对于其主天体的平均距离（千米），例如月球相对于地球 */
+  distanceFromPrimaryKm?: number
+  /** 主天体 id，例如 moon 的 primaryId 为 'earth' */
+  primaryId?: string
+  /** 教学示意场景中的模型直径；轨道与天体大小均为示意比例 */
+  visualDiameter?: number
+  /** 教学示意场景中相对太阳的轨道半径 */
+  visualDistanceFromSun?: number
+  /** 教学示意场景中相对主天体的轨道半径 */
+  visualDistanceFromPrimary?: number
+  /** 教学示意场景中的轨道自转速度（弧度/帧） */
+  visualOrbitalSpeed?: number
 }
 
 // 天体注册表：聚合所有已注册天体

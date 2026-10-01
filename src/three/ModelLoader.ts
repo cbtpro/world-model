@@ -8,7 +8,6 @@ export const NORMALIZED_MODEL_DIAMETER = 12
 // 模型加载器（单一职责）：负责 GLB 加载与旧模型资源释放
 export class ModelLoader {
   private gltfLoader: GLTFLoader
-  private currentModel: THREE.Group | null = null
 
   constructor() {
     this.gltfLoader = new GLTFLoader()
@@ -18,8 +17,12 @@ export class ModelLoader {
     this.gltfLoader.setDRACOLoader(dracoLoader)
   }
 
-  // 加载 GLB 模型，返回已标准化的 Group（居中 + 等比缩放至目标半径）
-  async load(url: string, onProgress?: ProgressCallback): Promise<THREE.Group> {
+  // 加载 GLB 并在可移动的外层 Group 内标准化，保留模型中心偏移。
+  async load(
+    url: string,
+    onProgress?: ProgressCallback,
+    targetDiameter = NORMALIZED_MODEL_DIAMETER,
+  ): Promise<THREE.Group> {
     const gltf = await this.gltfLoader.loadAsync(url, (event) => {
       if (onProgress && event.total) {
         const percent = (event.loaded / event.total) * 100
@@ -27,9 +30,10 @@ export class ModelLoader {
       }
     })
 
-    const model = gltf.scene
-    this.normalizeModel(model, NORMALIZED_MODEL_DIAMETER)
-    this.currentModel = model
+    const root = gltf.scene
+    this.normalizeModel(root, targetDiameter)
+    const model = new THREE.Group()
+    model.add(root)
     return model
   }
 
@@ -45,10 +49,9 @@ export class ModelLoader {
     model.scale.setScalar(scale)
   }
 
-  // 释放当前模型的几何体/材质/纹理，防止内存泄漏
-  disposeCurrent(): void {
-    if (!this.currentModel) return
-    this.currentModel.traverse((child) => {
+  // 释放指定模型的几何体/材质/纹理，防止内存泄漏
+  dispose(model: THREE.Group): void {
+    model.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.geometry?.dispose()
         const material = child.material
@@ -59,7 +62,6 @@ export class ModelLoader {
         }
       }
     })
-    this.currentModel = null
   }
 
   private disposeMaterial(material: THREE.Material): void {

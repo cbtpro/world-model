@@ -15,6 +15,10 @@ export const useUniverseStore = defineStore('universe', () => {
     bodyRegistry.bodies[DEFAULT_BODY_ID].defaultVariantId,
   )
   const selectedLandmarkId = ref<string | null>(null)
+  const cameraDistance = ref(45.7)
+  const rotationSpeed = ref(bodyRegistry.bodies[DEFAULT_BODY_ID].rotationSpeed ?? 0)
+  const rotationPaused = ref(false)
+  const viewResetKey = ref(0)
   const selectedLandmark = computed(
     () => lunarLandmarks.find(({ id }) => id === selectedLandmarkId.value) ?? null,
   )
@@ -46,8 +50,13 @@ export const useUniverseStore = defineStore('universe', () => {
   function setSelection(bodyId: string, variantId?: string) {
     const body = bodyRegistry.bodies[bodyId]
     if (!body) return
+    const bodyChanged = currentBodyId.value !== bodyId
     currentBodyId.value = bodyId
     currentVariantId.value = variantId ?? body.defaultVariantId
+    if (bodyChanged) {
+      rotationSpeed.value = body.rotationSpeed ?? 0
+      rotationPaused.value = false
+    }
     if (bodyId !== 'moon') selectedLandmarkId.value = null
   }
 
@@ -85,11 +94,23 @@ export const useUniverseStore = defineStore('universe', () => {
     loadingMessage.value = '初始化宇宙场景'
   }
 
+  function resetView() {
+    cameraDistance.value = 45.7
+    rotationSpeed.value = currentBody.value.rotationSpeed ?? 0
+    rotationPaused.value = false
+    selectedLandmarkId.value = null
+    viewResetKey.value += 1
+  }
+
   return {
     currentBodyId,
     currentVariantId,
     selectedLandmarkId,
     selectedLandmark,
+    cameraDistance,
+    rotationSpeed,
+    rotationPaused,
+    viewResetKey,
     sceneReady,
     modelLoading,
     loadingPhase,
@@ -100,6 +121,7 @@ export const useUniverseStore = defineStore('universe', () => {
     isLoading,
     setSelection,
     selectLandmark,
+    resetView,
     setSceneReady,
     startModelLoading,
     updateLoadingProgress,
