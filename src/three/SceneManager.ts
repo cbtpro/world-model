@@ -6,11 +6,24 @@ import {
 } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { Starfield } from './Starfield'
 import { UniverseAxes } from './UniverseAxes'
-import { ModelLoader, NORMALIZED_MODEL_DIAMETER } from './ModelLoader'
+import { ModelLoader } from './ModelLoader'
 import type { ProgressCallback } from './types'
 import { lunarLandmarks, type LunarLandmark } from '@/config/lunarLandmarks'
 
 const LANDMARK_SURFACE_OFFSET = 0.08
+
+export interface SceneBodyModel {
+  id: string
+  name: string
+  modelUrl: string
+  visualDiameter: number
+  visualDistanceFromSun: number
+  visualDistanceFromPrimary?: number
+  primaryId?: string
+  rotationSpeed: number
+  orbitalSpeed: number
+  includeLunarLandmarks?: boolean
+}
 
 interface LandmarkLabel {
   landmark: LunarLandmark
@@ -31,7 +44,17 @@ export class SceneManager {
   private axes: UniverseAxes
   private modelLoader: ModelLoader
   private currentModel: THREE.Group | null = null
-  private rotationSpeed = 0
+  private bodyModels = new Map<string, THREE.Group>()
+  private bodyAnchors = new Map<string, THREE.Group>()
+  private bodyPositions = new Map<string, THREE.Vector3>()
+  private bodyModelUrls = new Map<string, string>()
+  private bodyDiameters = new Map<string, number>()
+  private bodyRotationSpeeds = new Map<string, number>()
+  private bodyOrbitalSpeeds = new Map<string, number>()
+  private activeBodyId = ''
+  private isSystemView = false
+  private orbitLines: THREE.LineLoop[] = []
+  private focusedBodyWorldPosition: THREE.Vector3 | null = null
   private animationId: number | null = null
   private resizeObserver: ResizeObserver
   private landmarkLabels: LandmarkLabel[] = []
@@ -67,7 +90,7 @@ export class SceneManager {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.05
-    this.controls.minDistance = 12
+    this.controls.minDistance = 1
     this.controls.maxDistance = 300
     this.controls.rotateSpeed = 0.5
 
@@ -99,18 +122,127 @@ export class SceneManager {
     this.startRenderLoop()
   }
 
-  // 加载模型并添加到场景（先释放旧模型）
-  async loadModel(
-    url: string,
+  async loadSystem(
+    bodies: SceneBodyModel[],
     onProgress?: ProgressCallback,
-    includeLunarLandmarks = false,
   ): Promise<void> {
-    this.removeCurrentModel()
-    const model = await this.modelLoader.load(url, onProgress)
+    this.clearSystem()
+    const pending = [...bodies]
+    let loadedCount = 0
+
+    while (pending.length) {
+      const index = pending.findIndex(
+        ({ primaryId }) => !primaryId || this.bodyModels.has(primaryId),
+      )
+      if (index < 0) {
+        throw new Error('无法加载太阳系模型：主天体关系缺失或存在循环引用')
+      }
+      const [body] = pending.splice(index, 1)
+      const anchor = new THREE.Group()
+      const parentAnchor = body.primaryId
+        ? this.bodyAnchors.get(body.primaryId)
+        : undefined
+      if (body.primaryId && !parentAnchor) {
+        throw new Error(`找不到主天体「${body.primaryId}」`)
+      }
+      if (parentAnchor) {
+        parentAnchor.add(anchor)
+        anchor.position.copy(this.bodyPositions.get(body.primaryId!)!)
+      } else {
+        this.scene.add(anchor)
+      }
+
+      const position = new THREE.Vector3(
+        body.primaryId
+          ? body.visualDistanceFromPrimary ?? 0
+          : body.visualDistanceFromSun,
+        0,
+        0,
+      )
+      const model = await this.modelLoader.load(
+        body.modelUrl,
+        (progress) =>
+          onProgress?.(((loadedCount + progress / 100) / bodies.length) * 100),
+        body.visualDiameter,
+      )
+      model.position.copy(position)
+      anchor.add(model)
+      this.bodyAnchors.set(body.id, anchor)
+      this.bodyPositions.set(body.id, position)
+      this.bodyModels.set(body.id, model)
+      this.bodyModelUrls.set(body.id, body.modelUrl)
+      this.bodyDiameters.set(body.id, body.visualDiameter)
+      this.bodyRotationSpeeds.set(body.id, body.rotationSpeed)
+      this.bodyOrbitalSpeeds.set(body.id, body.orbitalSpeed)
+      if (body.includeLunarLandmarks) {
+        this.createLandmarkLabels(model, body.visualDiameter)
+      }
+      this.createBodyLabel(model, body.name, body.visualDiameter)
+      loadedCount += 1
+      onProgress?.((loadedCount / bodies.length) * 100)
+    }
+
+    this.createOrbitLines(bodies)
+    onProgress?.(100)
+  }
+
+  async replaceBodyModel(
+    body: SceneBodyModel,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
+    const anchor = this.bodyAnchors.get(body.id)
+    const previous = this.bodyModels.get(body.id)
+    if (!anchor || !previous) {
+      throw new Error(`无法替换未加载的天体模型「${body.id}」`)
+    }
+
+    const position = this.bodyPositions.get(body.id)
+    if (!position) throw new Error(`找不到天体「${body.id}」的场景坐标`)
+    anchor.remove(previous)
+    this.modelLoader.dispose(previous)
+    if (body.id === 'moon') this.landmarkLabels = []
+
+    const model = await this.modelLoader.load(
+      body.modelUrl,
+      onProgress,
+      body.visualDiameter,
+    )
+    model.position.copy(position)
+    anchor.add(model)
+    this.bodyModels.set(body.id, model)
+    this.bodyModelUrls.set(body.id, body.modelUrl)
+    this.bodyDiameters.set(body.id, body.visualDiameter)
+    this.bodyRotationSpeeds.set(body.id, body.rotationSpeed)
+    if (body.includeLunarLandmarks) {
+      this.createLandmarkLabels(model, body.visualDiameter)
+    }
+    this.createBodyLabel(model, body.name, body.visualDiameter)
+    if (this.activeBodyId === body.id) {
+      this.currentModel = model
+      model.updateMatrixWorld(true)
+      if (this.focusedLandmarkId) this.focusLandmark(this.focusedLandmarkId)
+    }
+  }
+
+  getBodyModelUrl(bodyId: string): string | undefined {
+    return this.bodyModelUrls.get(bodyId)
+  }
+
+  setActiveBody(bodyId: string): number {
+    const model = this.bodyModels.get(bodyId)
+    if (!model) throw new Error(`场景中不存在天体「${bodyId}」`)
+    this.isSystemView = false
+    this.activeBodyId = bodyId
     this.currentModel = model
-    this.scene.add(model)
-    if (includeLunarLandmarks) this.createLandmarkLabels(model)
-    if (this.focusedLandmarkId) this.focusLandmark(this.focusedLandmarkId)
+    this.currentModel.updateWorldMatrix(true, false)
+    const target = model.getWorldPosition(new THREE.Vector3())
+    const distance = Math.max(3, (this.bodyDiameters.get(bodyId) ?? 12) * 2.5)
+    const offset = new THREE.Vector3(0, 0.2, 1).setLength(distance)
+    this.controls.target.copy(target)
+    this.camera.position.copy(target).add(offset)
+    this.focusedBodyWorldPosition = target
+    this.controls.update()
+    return distance
   }
 
   setFocusedLandmark(landmarkId: string | null): void {
@@ -120,12 +252,78 @@ export class SceneManager {
     }
 
     if (landmarkId) this.focusLandmark(landmarkId)
-    else this.focusedWorldPosition = null
+    else {
+      this.focusedWorldPosition = null
+      this.focusedBodyWorldPosition =
+        !this.isSystemView && this.currentModel
+          ? this.currentModel.getWorldPosition(new THREE.Vector3())
+          : null
+    }
+    if (this.activeBodyId !== 'moon') {
+      for (const { label } of this.landmarkLabels) {
+        label.element.style.display = 'none'
+      }
+    }
   }
 
-  // 设置模型自转速度
+  // 设置当前选中天体的自转速度
   setRotationSpeed(speed: number): void {
-    this.rotationSpeed = speed
+    this.bodyRotationSpeeds.set(this.activeBodyId, speed)
+  }
+
+  setCameraDistance(distance: number): void {
+    const offset = this.camera.position.clone().sub(this.controls.target)
+    if (offset.lengthSq() === 0) offset.set(0, 0, 1)
+    offset.setLength(
+      THREE.MathUtils.clamp(
+        distance,
+        this.controls.minDistance,
+        this.controls.maxDistance,
+      ),
+    )
+    this.camera.position.copy(this.controls.target).add(offset)
+    this.controls.update()
+  }
+
+  resetView(): number {
+    let minimumX = Infinity
+    let maximumX = -Infinity
+    let maximumY = 0
+    for (const [id, model] of this.bodyModels) {
+      model.updateWorldMatrix(true, false)
+      const center = model.getWorldPosition(new THREE.Vector3())
+      const radius = (this.bodyDiameters.get(id) ?? 0) / 2
+      minimumX = Math.min(minimumX, center.x - radius)
+      maximumX = Math.max(maximumX, center.x + radius)
+      maximumY = Math.max(maximumY, Math.abs(center.y) + radius)
+    }
+
+    const target =
+      this.bodyModels.size > 0
+        ? new THREE.Vector3((minimumX + maximumX) / 2, 0, 0)
+        : new THREE.Vector3()
+    const horizontalTangent =
+      Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) *
+      this.camera.aspect
+    const distance = Math.min(
+      this.controls.maxDistance,
+      Math.max(
+        40,
+        ((maximumX - minimumX) / (2 * horizontalTangent)) * 1.2,
+        (maximumY / Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))) *
+          1.2,
+      ),
+    )
+    this.controls.target.copy(target)
+    this.camera.position
+      .copy(target)
+      .add(new THREE.Vector3(0, 0.25, 1).setLength(distance))
+    this.focusedLandmarkId = null
+    this.focusedWorldPosition = null
+    this.focusedBodyWorldPosition = null
+    this.isSystemView = true
+    this.controls.update()
+    return distance
   }
 
   // 窗口尺寸变化时重设渲染器与相机宽高比
@@ -142,11 +340,15 @@ export class SceneManager {
   private startRenderLoop(): void {
     const animate = () => {
       this.animationId = requestAnimationFrame(animate)
-      if (this.currentModel && this.rotationSpeed) {
-        this.currentModel.rotation.y += this.rotationSpeed
+      for (const [bodyId, model] of this.bodyModels) {
+        model.rotation.y += this.bodyRotationSpeeds.get(bodyId) ?? 0
+      }
+      for (const [bodyId, anchor] of this.bodyAnchors) {
+        anchor.rotation.y += this.bodyOrbitalSpeeds.get(bodyId) ?? 0
       }
       this.updateLandmarkLabels()
-      this.followFocusedLandmark()
+      if (this.focusedWorldPosition) this.followFocusedLandmark()
+      else this.followFocusedBody()
       this.controls.update()
       this.renderer.render(this.scene, this.camera)
       this.cssRenderer.render(this.scene, this.camera)
@@ -154,10 +356,10 @@ export class SceneManager {
     animate()
   }
 
-  private createLandmarkLabels(model: THREE.Group): void {
+  private createLandmarkLabels(model: THREE.Group, diameter: number): void {
     const rootScale = Math.abs(model.scale.x)
     const localRadius =
-      (NORMALIZED_MODEL_DIAMETER / 2 + LANDMARK_SURFACE_OFFSET) / rootScale
+      (diameter / 2 + LANDMARK_SURFACE_OFFSET) / rootScale
 
     this.landmarkLabels = lunarLandmarks.map((landmark) => {
       const latitude = THREE.MathUtils.degToRad(landmark.latitude)
@@ -188,8 +390,70 @@ export class SceneManager {
     })
   }
 
+  private createBodyLabel(
+    model: THREE.Group,
+    name: string,
+    diameter: number,
+  ): void {
+    const labelElement = document.createElement('div')
+    labelElement.className = 'celestial-body-label'
+    labelElement.textContent = name
+    labelElement.setAttribute('aria-hidden', 'true')
+    const label = new CSS2DObject(labelElement)
+    const scale = Math.abs(model.scale.x) || 1
+    label.position.set(0, diameter / (2 * scale) + 0.6 / scale, 0)
+    model.add(label)
+  }
+
+  private createOrbitLines(bodies: SceneBodyModel[]): void {
+    for (const body of bodies) {
+      if (body.visualDistanceFromSun > 0) {
+        this.addOrbitLine(body.visualDistanceFromSun, this.scene)
+      }
+      if (body.primaryId && body.visualDistanceFromPrimary) {
+        const parentAnchor = this.bodyAnchors.get(body.primaryId)
+        const center = this.bodyPositions.get(body.primaryId)
+        if (parentAnchor && center) {
+          this.addOrbitLine(
+            body.visualDistanceFromPrimary,
+            parentAnchor,
+            center,
+          )
+        }
+      }
+    }
+  }
+
+  private addOrbitLine(
+    radius: number,
+    parent: THREE.Object3D,
+    center = new THREE.Vector3(),
+  ): void {
+    const points: THREE.Vector3[] = []
+    for (let i = 0; i < 128; i += 1) {
+      const angle = (i / 128) * Math.PI * 2
+      points.push(
+        new THREE.Vector3(
+          center.x + Math.cos(angle) * radius,
+          center.y,
+          center.z + Math.sin(angle) * radius,
+        ),
+      )
+    }
+    const line = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({
+        color: 0x47658c,
+        transparent: true,
+        opacity: 0.45,
+      }),
+    )
+    parent.add(line)
+    this.orbitLines.push(line)
+  }
+
   private updateLandmarkLabels(): void {
-    if (!this.currentModel) return
+    if (!this.currentModel || this.activeBodyId !== 'moon') return
     this.currentModel.updateMatrixWorld(true)
 
     for (const { label, localPosition } of this.landmarkLabels) {
@@ -246,14 +510,45 @@ export class SceneManager {
     this.focusedWorldPosition.add(movement)
   }
 
-  private removeCurrentModel(): void {
-    if (this.currentModel) {
-      this.scene.remove(this.currentModel)
-      this.modelLoader.disposeCurrent()
-      this.currentModel = null
+  private followFocusedBody(): void {
+    if (!this.currentModel || !this.focusedBodyWorldPosition) return
+    const nextPosition = this.currentModel.getWorldPosition(new THREE.Vector3())
+    const movement = nextPosition.sub(this.focusedBodyWorldPosition)
+    this.camera.position.add(movement)
+    this.controls.target.add(movement)
+    this.focusedBodyWorldPosition.add(movement)
+  }
+
+  private clearSystem(): void {
+    for (const model of this.bodyModels.values()) {
+      model.parent?.remove(model)
+      this.modelLoader.dispose(model)
     }
+    for (const line of this.orbitLines) {
+      line.parent?.remove(line)
+      line.geometry.dispose()
+      const material = line.material
+      if (Array.isArray(material)) material.forEach((item) => item.dispose())
+      else material.dispose()
+    }
+    for (const anchor of this.bodyAnchors.values()) {
+      anchor.parent?.remove(anchor)
+    }
+    this.bodyModels.clear()
+    this.bodyAnchors.clear()
+    this.bodyPositions.clear()
+    this.bodyModelUrls.clear()
+    this.bodyDiameters.clear()
+    this.bodyRotationSpeeds.clear()
+    this.bodyOrbitalSpeeds.clear()
+    this.orbitLines = []
+    this.currentModel = null
+    this.activeBodyId = ''
+    this.isSystemView = false
     this.landmarkLabels = []
+    this.focusedLandmarkId = null
     this.focusedWorldPosition = null
+    this.focusedBodyWorldPosition = null
   }
 
   // 释放所有资源（渲染器、场景对象、监听器）
@@ -262,7 +557,7 @@ export class SceneManager {
       cancelAnimationFrame(this.animationId)
     }
     this.resizeObserver.disconnect()
-    this.removeCurrentModel()
+    this.clearSystem()
     this.starfield.dispose()
     this.axes.dispose()
     this.controls.dispose()

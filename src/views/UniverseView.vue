@@ -5,6 +5,7 @@ import LoadingOverlay from '@/components/LoadingOverlay.vue'
 import BodySelector from '@/components/BodySelector.vue'
 import VariantSelector from '@/components/VariantSelector.vue'
 import LandmarkNavigator from '@/components/LandmarkNavigator.vue'
+import SceneControls from '@/components/SceneControls.vue'
 
 // 主页面：组装画布 + 控制面板 + 加载遮罩
 const store = useUniverseStore()
@@ -28,8 +29,16 @@ const store = useUniverseStore()
       <aside class="info-panel">
         <h2 class="body-name">{{ store.currentBody.name }}</h2>
         <p class="variant-name">{{ store.currentVariant.name }}</p>
-        <p class="description">{{ store.currentVariant.description }}</p>
-        <p class="source">数据来源：NASA SVS #14959</p>
+        <p class="description">
+          {{ store.currentBody.description }}。{{ store.currentVariant.description }}
+        </p>
+        <p class="source">
+          {{ store.currentBodyId === 'moon' ? '月球数据来源：NASA SVS #14959' : '太阳、地球与月球同场景展示；轨道距离与模型大小为教学示意比例' }}
+        </p>
+      </aside>
+
+      <aside class="scene-control-panel">
+        <SceneControls />
       </aside>
 
       <footer class="bottom-bar">
@@ -83,6 +92,13 @@ const store = useUniverseStore()
   pointer-events: auto;
 }
 
+.scene-control-panel {
+  position: absolute;
+  right: 24px;
+  bottom: 28px;
+  pointer-events: auto;
+}
+
 .body-name {
   font-size: 20px;
   font-weight: 600;
@@ -127,6 +143,16 @@ const store = useUniverseStore()
     top: 12px;
     right: 12px;
     max-width: 190px;
+    padding: 11px 12px;
+  }
+
+  .scene-control-panel {
+    right: 12px;
+    bottom: 82px;
+  }
+
+  :deep(.scene-controls) {
+    width: 190px;
     padding: 11px 12px;
   }
 

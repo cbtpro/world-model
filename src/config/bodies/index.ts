@@ -1,13 +1,15 @@
 import type { BodyRegistry, CelestialBody } from './types'
 import { moon } from './moon'
+import { earth } from './earth'
+import { sun } from './sun'
 
 // 天体注册表（OCP 扩展点）
 // 新增天体时：1) 在此目录新建 body 文件；2) 在下方数组添加一行 import 引用。
 // 无需修改既有文件逻辑，符合开闭原则。
 const bodyDefinitions: CelestialBody[] = [
+  sun,
+  earth,
   moon,
-  // earth,   // 未来：地球
-  // sun,     // 未来：太阳
   // venus,   // 未来：金星
   // comet,   // 未来：彗星
 ]
@@ -18,5 +20,8 @@ export const bodyRegistry: BodyRegistry = {
   list: bodyDefinitions,
 }
 
-// 默认天体 id（用于路由守卫回退）
-export const DEFAULT_BODY_ID = bodyDefinitions[0]?.id ?? 'moon'
+// 默认天体 id（用于路由守卫回退）；新增天体不应改变既有默认页
+export const DEFAULT_BODY_ID =
+  bodyDefinitions.find(({ id }) => id === 'moon')?.id ??
+  bodyDefinitions[0]?.id ??
+  'moon'
