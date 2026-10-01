@@ -24,6 +24,8 @@ pnpm-debug.log*
 .trae/
 .workbuddy/
 
+.history/
+
 # Local env files
 .env
 .env.*
