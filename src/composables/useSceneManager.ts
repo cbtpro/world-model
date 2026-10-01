@@ -50,6 +50,13 @@ export function useSceneManager() {
     },
   )
 
+  watch(
+    () => store.selectedLandmarkId,
+    (landmarkId) => {
+      sceneManager?.setFocusedLandmark(landmarkId)
+    },
+  )
+
   // 加载当前选中的模型变体
   async function loadCurrentModel(): Promise<void> {
     if (!sceneManager) return
@@ -64,11 +71,12 @@ export function useSceneManager() {
     loadingPromise = sceneManager
       .loadModel(variant.modelUrl, (progress) => {
         store.updateLoadingProgress(progress)
-      })
+      }, store.currentBodyId === 'moon')
       .then(() => {
         sceneManager?.setRotationSpeed(
           store.currentBody.rotationSpeed ?? 0,
         )
+        sceneManager?.setFocusedLandmark(store.selectedLandmarkId)
       })
       .catch((err) => {
         console.error('模型加载失败:', err)
