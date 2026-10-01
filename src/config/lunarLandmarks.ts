@@ -1,0 +1,122 @@
+export type LunarLandmarkKind = 'crater' | 'mission'
+
+export interface LunarLandmark {
+  id: string
+  name: string
+  kind: LunarLandmarkKind
+  latitude: number
+  longitude: number
+  coordinates: string
+  detail: string
+}
+
+export const lunarLandmarks: LunarLandmark[] = [
+  {
+    id: 'tycho',
+    name: '第谷环形山',
+    kind: 'crater',
+    latitude: -43.31,
+    longitude: -11.36,
+    coordinates: '南纬 43.31° · 西经 11.36°',
+    detail: '南部高地著名撞击坑，明亮的辐射纹从坑缘向外延伸。',
+  },
+  {
+    id: 'copernicus',
+    name: '哥白尼环形山',
+    kind: 'crater',
+    latitude: 9.62,
+    longitude: -20.08,
+    coordinates: '北纬 9.62° · 西经 20.08°',
+    detail: '雨海以南的大型撞击坑，拥有明显的中央峰和辐射纹。',
+  },
+  {
+    id: 'aristarchus',
+    name: '阿里斯塔克环形山',
+    kind: 'crater',
+    latitude: 23.7,
+    longitude: -47.4,
+    coordinates: '北纬 23.7° · 西经 47.4°',
+    detail: '月面最明亮的撞击坑之一，位于风暴洋高原。',
+  },
+  {
+    id: 'apollo-11',
+    name: '阿波罗 11 号',
+    kind: 'mission',
+    latitude: 0.674,
+    longitude: 23.473,
+    coordinates: '北纬 0.674° · 东经 23.473°',
+    detail: '1969 年人类首次载人登月，着陆于静海。',
+  },
+  {
+    id: 'apollo-12',
+    name: '阿波罗 12 号',
+    kind: 'mission',
+    latitude: -3.012,
+    longitude: -23.421,
+    coordinates: '南纬 3.012° · 西经 23.421°',
+    detail: '1969 年着陆于风暴洋，宇航员勘察了勘测者 3 号探测器。',
+  },
+  {
+    id: 'apollo-14',
+    name: '阿波罗 14 号',
+    kind: 'mission',
+    latitude: -3.645,
+    longitude: -17.471,
+    coordinates: '南纬 3.645° · 西经 17.471°',
+    detail: '1971 年着陆于弗拉·毛罗高地。',
+  },
+  {
+    id: 'apollo-15',
+    name: '阿波罗 15 号',
+    kind: 'mission',
+    latitude: 26.132,
+    longitude: 3.634,
+    coordinates: '北纬 26.132° · 东经 3.634°',
+    detail: '1971 年首次执行载人月球车任务，着陆于哈德利-亚平宁地区。',
+  },
+  {
+    id: 'apollo-16',
+    name: '阿波罗 16 号',
+    kind: 'mission',
+    latitude: -8.973,
+    longitude: 15.501,
+    coordinates: '南纬 8.973° · 东经 15.501°',
+    detail: '1972 年着陆于笛卡尔高地。',
+  },
+  {
+    id: 'apollo-17',
+    name: '阿波罗 17 号',
+    kind: 'mission',
+    latitude: 20.19,
+    longitude: 30.772,
+    coordinates: '北纬 20.19° · 东经 30.772°',
+    detail: '1972 年阿波罗计划最后一次载人登月，着陆于陶拉斯-利特罗山谷。',
+  },
+  {
+    id: 'luna-9',
+    name: '月球 9 号',
+    kind: 'mission',
+    latitude: 7.08,
+    longitude: -64.37,
+    coordinates: '北纬 7.08° · 西经 64.37°',
+    detail: '1966 年首次实现月面软着陆，并传回月面图像。',
+  },
+  {
+    id: 'luna-2',
+    name: '月球 2 号',
+    kind: 'mission',
+    latitude: 29.1,
+    longitude: 0,
+    coordinates: '北纬约 29.1° · 月面正面',
+    detail: '1959 年首个抵达月球表面的人造探测器，撞击于雨海区域。',
+  },
+  {
+    id: 'change-4',
+    name: '嫦娥四号',
+    kind: 'mission',
+    latitude: -45.457,
+    longitude: 177.588,
+    coordinates: '南纬 45.457° · 东经 177.588°',
+    detail: '2019 年首次实现月球背面软着陆，位于冯·卡门撞击坑内。',
+  },
+]

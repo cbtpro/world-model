@@ -1,12 +1,22 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
+  CSS2DObject,
   CSS2DRenderer,
 } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { Starfield } from './Starfield'
 import { UniverseAxes } from './UniverseAxes'
 import { ModelLoader } from './ModelLoader'
 import type { ProgressCallback } from './types'
+import { lunarLandmarks, type LunarLandmark } from '@/config/lunarLandmarks'
+
+const LANDMARK_RADIUS = 12.08
+
+interface LandmarkLabel {
+  landmark: LunarLandmark
+  label: CSS2DObject
+  localPosition: THREE.Vector3
+}
 
 // 场景管理器：封装 Three.js 渲染器/场景/相机/控制器/灯光/渲染循环
 // 命令式类，不使用 Vue 响应式包装（避免 Three 对象被 Proxy 代理导致性能损耗）
@@ -24,6 +34,9 @@ export class SceneManager {
   private rotationSpeed = 0
   private animationId: number | null = null
   private resizeObserver: ResizeObserver
+  private landmarkLabels: LandmarkLabel[] = []
+  private focusedLandmarkId: string | null = null
+  private focusedWorldPosition: THREE.Vector3 | null = null
 
   constructor(container: HTMLElement) {
     this.container = container
@@ -90,11 +103,24 @@ export class SceneManager {
   async loadModel(
     url: string,
     onProgress?: ProgressCallback,
+    includeLunarLandmarks = false,
   ): Promise<void> {
     this.removeCurrentModel()
     const model = await this.modelLoader.load(url, onProgress)
     this.currentModel = model
     this.scene.add(model)
+    if (includeLunarLandmarks) this.createLandmarkLabels(model)
+    if (this.focusedLandmarkId) this.focusLandmark(this.focusedLandmarkId)
+  }
+
+  setFocusedLandmark(landmarkId: string | null): void {
+    this.focusedLandmarkId = landmarkId
+    for (const { landmark, label } of this.landmarkLabels) {
+      label.element.classList.toggle('selected', landmark.id === landmarkId)
+    }
+
+    if (landmarkId) this.focusLandmark(landmarkId)
+    else this.focusedWorldPosition = null
   }
 
   // 设置模型自转速度
@@ -119,11 +145,97 @@ export class SceneManager {
       if (this.currentModel && this.rotationSpeed) {
         this.currentModel.rotation.y += this.rotationSpeed
       }
+      this.updateLandmarkLabels()
+      this.followFocusedLandmark()
       this.controls.update()
       this.renderer.render(this.scene, this.camera)
       this.cssRenderer.render(this.scene, this.camera)
     }
     animate()
+  }
+
+  private createLandmarkLabels(model: THREE.Group): void {
+    this.landmarkLabels = lunarLandmarks.map((landmark) => {
+      const latitude = THREE.MathUtils.degToRad(landmark.latitude)
+      const longitude = THREE.MathUtils.degToRad(landmark.longitude)
+      const localPosition = new THREE.Vector3(
+        Math.cos(latitude) * Math.sin(longitude),
+        Math.sin(latitude),
+        Math.cos(latitude) * Math.cos(longitude),
+      ).multiplyScalar(LANDMARK_RADIUS)
+
+      const element = document.createElement('div')
+      element.className = `lunar-landmark-label ${landmark.kind}`
+      element.setAttribute('aria-hidden', 'true')
+      const dot = document.createElement('span')
+      dot.className = 'landmark-dot'
+      const name = document.createElement('span')
+      name.textContent = landmark.name
+      element.append(dot, name)
+
+      const label = new CSS2DObject(element)
+      label.position.copy(localPosition)
+      model.add(label)
+      return { landmark, label, localPosition }
+    })
+  }
+
+  private updateLandmarkLabels(): void {
+    if (!this.currentModel) return
+    this.currentModel.updateMatrixWorld(true)
+
+    for (const { label, localPosition } of this.landmarkLabels) {
+      const normal = localPosition
+        .clone()
+        .transformDirection(this.currentModel.matrixWorld)
+      const worldPosition = localPosition
+        .clone()
+        .applyMatrix4(this.currentModel.matrixWorld)
+      const towardCamera = this.camera.position.clone().sub(worldPosition).normalize()
+      label.element.style.display = normal.dot(towardCamera) > 0.08 ? 'flex' : 'none'
+    }
+  }
+
+  private focusLandmark(landmarkId: string): void {
+    const entry = this.landmarkLabels.find(
+      ({ landmark }) => landmark.id === landmarkId,
+    )
+    if (!entry || !this.currentModel) return
+
+    this.currentModel.updateMatrixWorld(true)
+    const target = entry.localPosition
+      .clone()
+      .applyMatrix4(this.currentModel.matrixWorld)
+    const offset = this.camera.position.clone().sub(this.controls.target)
+    if (offset.lengthSq() === 0) offset.set(0, 0, 1)
+    offset.setLength(
+      THREE.MathUtils.clamp(
+        offset.length(),
+        this.controls.minDistance,
+        this.controls.maxDistance,
+      ),
+    )
+
+    this.controls.target.copy(target)
+    this.camera.position.copy(target).add(offset)
+    this.focusedWorldPosition = target
+    this.controls.update()
+  }
+
+  private followFocusedLandmark(): void {
+    if (!this.focusedWorldPosition || !this.currentModel) return
+    const focused = this.landmarkLabels.find(
+      ({ landmark }) => landmark.id === this.focusedLandmarkId,
+    )
+    if (!focused) return
+
+    const nextPosition = focused.localPosition
+      .clone()
+      .applyMatrix4(this.currentModel.matrixWorld)
+    const movement = nextPosition.sub(this.focusedWorldPosition)
+    this.camera.position.add(movement)
+    this.controls.target.add(movement)
+    this.focusedWorldPosition.add(movement)
   }
 
   private removeCurrentModel(): void {
@@ -132,6 +244,8 @@ export class SceneManager {
       this.modelLoader.disposeCurrent()
       this.currentModel = null
     }
+    this.landmarkLabels = []
+    this.focusedWorldPosition = null
   }
 
   // 释放所有资源（渲染器、场景对象、监听器）

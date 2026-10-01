@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { bodyRegistry, DEFAULT_BODY_ID } from '@/config/bodies'
 import type { CelestialBody, CelestialVariant } from '@/config/bodies/types'
+import { lunarLandmarks } from '@/config/lunarLandmarks'
 
 // 加载阶段类型
 export type LoadingPhase = 'scene' | 'model' | 'idle'
@@ -12,6 +13,10 @@ export const useUniverseStore = defineStore('universe', () => {
   const currentBodyId = ref<string>(DEFAULT_BODY_ID)
   const currentVariantId = ref<string>(
     bodyRegistry.bodies[DEFAULT_BODY_ID].defaultVariantId,
+  )
+  const selectedLandmarkId = ref<string | null>(null)
+  const selectedLandmark = computed(
+    () => lunarLandmarks.find(({ id }) => id === selectedLandmarkId.value) ?? null,
   )
 
   // ---- 加载状态 ----
@@ -43,6 +48,13 @@ export const useUniverseStore = defineStore('universe', () => {
     if (!body) return
     currentBodyId.value = bodyId
     currentVariantId.value = variantId ?? body.defaultVariantId
+    if (bodyId !== 'moon') selectedLandmarkId.value = null
+  }
+
+  function selectLandmark(id: string) {
+    if (lunarLandmarks.some((landmark) => landmark.id === id)) {
+      selectedLandmarkId.value = id
+    }
   }
 
   function setSceneReady(ready: boolean) {
@@ -76,6 +88,8 @@ export const useUniverseStore = defineStore('universe', () => {
   return {
     currentBodyId,
     currentVariantId,
+    selectedLandmarkId,
+    selectedLandmark,
     sceneReady,
     modelLoading,
     loadingPhase,
@@ -85,6 +99,7 @@ export const useUniverseStore = defineStore('universe', () => {
     currentVariant,
     isLoading,
     setSelection,
+    selectLandmark,
     setSceneReady,
     startModelLoading,
     updateLoadingProgress,

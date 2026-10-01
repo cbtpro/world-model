@@ -4,6 +4,7 @@ import UniverseCanvas from '@/components/UniverseCanvas.vue'
 import LoadingOverlay from '@/components/LoadingOverlay.vue'
 import BodySelector from '@/components/BodySelector.vue'
 import VariantSelector from '@/components/VariantSelector.vue'
+import LandmarkNavigator from '@/components/LandmarkNavigator.vue'
 
 // 主页面：组装画布 + 控制面板 + 加载遮罩
 const store = useUniverseStore()
@@ -19,6 +20,10 @@ const store = useUniverseStore()
       <header class="top-bar">
         <BodySelector />
       </header>
+
+      <aside v-if="store.currentBodyId === 'moon'" class="landmark-navigation">
+        <LandmarkNavigator />
+      </aside>
 
       <aside class="info-panel">
         <h2 class="body-name">{{ store.currentBody.name }}</h2>
@@ -71,6 +76,13 @@ const store = useUniverseStore()
   pointer-events: auto;
 }
 
+.landmark-navigation {
+  position: absolute;
+  top: 110px;
+  left: 24px;
+  pointer-events: auto;
+}
+
 .body-name {
   font-size: 20px;
   font-weight: 600;
@@ -103,5 +115,24 @@ const store = useUniverseStore()
   left: 50%;
   transform: translateX(-50%);
   pointer-events: auto;
+}
+
+@media (max-width: 600px) {
+  .landmark-navigation {
+    top: 100px;
+    left: 12px;
+  }
+
+  .info-panel {
+    top: 12px;
+    right: 12px;
+    max-width: 190px;
+    padding: 11px 12px;
+  }
+
+  .description,
+  .source {
+    display: none;
+  }
 }
 </style>
