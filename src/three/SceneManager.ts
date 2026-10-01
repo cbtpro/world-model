@@ -9,6 +9,7 @@ import { UniverseAxes } from './UniverseAxes'
 import { ModelLoader } from './ModelLoader'
 import type { ProgressCallback } from './types'
 import { lunarLandmarks, type LunarLandmark } from '@/config/lunarLandmarks'
+import { lunarOrbiters } from '@/config/lunarOrbiters'
 
 const LANDMARK_SURFACE_OFFSET = 0.08
 
@@ -29,6 +30,13 @@ interface LandmarkLabel {
   landmark: LunarLandmark
   label: CSS2DObject
   localPosition: THREE.Vector3
+}
+
+interface LunarOrbiterModel {
+  pivot: THREE.Group
+  spacecraft: THREE.Group
+  orbitalPeriodDays: number
+  phaseRadians: number
 }
 
 // 场景管理器：封装 Three.js 渲染器/场景/相机/控制器/灯光/渲染循环
@@ -55,11 +63,15 @@ export class SceneManager {
   private activeBodyId = ''
   private isSystemView = false
   private auxiliaryLinesVisible = true
+  private simulationDay = 0
   private orbitLines: THREE.LineLoop[] = []
   private focusedBodyWorldPosition: THREE.Vector3 | null = null
   private animationId: number | null = null
   private resizeObserver: ResizeObserver
   private landmarkLabels: LandmarkLabel[] = []
+  private lunarOrbiterModels: LunarOrbiterModel[] = []
+  private lunarOrbiterLabels: CSS2DObject[] = []
+  private lunarOrbiterOrbitLines: THREE.LineLoop[] = []
   private focusedLandmarkId: string | null = null
   private focusedWorldPosition: THREE.Vector3 | null = null
 
@@ -177,6 +189,8 @@ export class SceneManager {
       this.bodyOrbitalPeriods.set(body.id, body.orbitalPeriodDays)
       if (body.includeLunarLandmarks) {
         this.createLandmarkLabels(model, body.visualDiameter)
+        this.createLunarSurfaceProbes(model, body.visualDiameter)
+        this.createLunarOrbiters(anchor, body.visualDiameter)
       }
       this.createBodyLabel(model, body.name, body.visualDiameter)
       loadedCount += 1
@@ -201,7 +215,10 @@ export class SceneManager {
 
     anchor.remove(previous)
     this.modelLoader.dispose(previous)
-    if (body.id === 'moon') this.landmarkLabels = []
+    if (body.id === 'moon') {
+      this.landmarkLabels = []
+      this.removeLunarOrbiters()
+    }
 
     const model = await this.modelLoader.load(
       body.modelUrl,
@@ -215,8 +232,11 @@ export class SceneManager {
     this.bodyRotationPeriods.set(body.id, body.rotationPeriodDays)
     if (body.includeLunarLandmarks) {
       this.createLandmarkLabels(model, body.visualDiameter)
+      this.createLunarSurfaceProbes(model, body.visualDiameter)
+      this.createLunarOrbiters(anchor, body.visualDiameter)
     }
     this.createBodyLabel(model, body.name, body.visualDiameter)
+    this.setSimulationTime(this.simulationDay)
     if (this.activeBodyId === body.id) {
       this.currentModel = model
       model.updateMatrixWorld(true)
@@ -235,6 +255,7 @@ export class SceneManager {
   }
 
   setSimulationTime(days: number): void {
+    this.simulationDay = days
     for (const [bodyId, model] of this.bodyModels) {
       const period = this.bodyRotationPeriods.get(bodyId)
       model.rotation.y = period ? (days / period) * Math.PI * 2 : 0
@@ -242,6 +263,16 @@ export class SceneManager {
     for (const [bodyId, anchor] of this.bodyOrbitPivots) {
       const period = this.bodyOrbitalPeriods.get(bodyId)
       anchor.rotation.y = period ? (days / period) * Math.PI * 2 : 0
+    }
+    for (const {
+      pivot,
+      spacecraft,
+      orbitalPeriodDays,
+      phaseRadians,
+    } of this.lunarOrbiterModels) {
+      const angle = (days / orbitalPeriodDays) * Math.PI * 2 + phaseRadians
+      pivot.rotation.y = angle
+      spacecraft.rotation.y = -angle
     }
     this.updateSunlightDirection()
   }
@@ -363,6 +394,7 @@ export class SceneManager {
       this.animationId = requestAnimationFrame(animate)
       this.updateSunlightDirection()
       this.updateLandmarkLabels()
+      this.updateLunarOrbiterLabels()
       if (this.focusedWorldPosition) this.followFocusedLandmark()
       else this.followFocusedBody()
       this.controls.update()
@@ -418,6 +450,600 @@ export class SceneManager {
     })
   }
 
+  private createLunarSurfaceProbes(model: THREE.Group, diameter: number): void {
+    const radius = diameter / 2
+    const rootScale = Math.abs(model.scale.x) || 1
+
+    for (const landmark of lunarLandmarks) {
+      const latitude = THREE.MathUtils.degToRad(landmark.latitude)
+      const longitude = THREE.MathUtils.degToRad(landmark.longitude)
+      const direction = new THREE.Vector3(
+        Math.cos(latitude) * Math.sin(longitude),
+        Math.sin(latitude),
+        Math.cos(latitude) * Math.cos(longitude),
+      ).normalize()
+      const marker = new THREE.Group()
+      marker.position.copy(
+        direction.clone().multiplyScalar((radius + 0.002) / rootScale),
+      )
+      marker.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        direction,
+      )
+      model.add(marker)
+
+      if (landmark.kind === 'mission' && landmark.id !== 'luna-2') {
+        this.addLanderModel(marker, landmark.id)
+        if (
+          ['apollo-15', 'apollo-16', 'apollo-17', 'change-3', 'change-4'].includes(
+            landmark.id,
+          )
+        ) {
+          const rover = new THREE.Group()
+          rover.position.set(0.085 / rootScale, 0, 0.055 / rootScale)
+          marker.add(rover)
+          this.addLunarRover(rover)
+        }
+      } else {
+        const beacon = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.008, 0.014, 0.045, 6),
+          new THREE.MeshStandardMaterial({
+            color: landmark.kind === 'crater' ? 0xffd27a : 0xff9b75,
+            emissive: landmark.kind === 'crater' ? 0x5a3300 : 0x5a1c08,
+            roughness: 0.55,
+          }),
+        )
+        beacon.position.y = 0.02 / rootScale
+        marker.add(beacon)
+      }
+    }
+  }
+
+  private addLanderModel(parent: THREE.Group, landmarkId: string): void {
+    const scale = 0.075
+    const gold = new THREE.MeshStandardMaterial({
+      color: 0xc99a43,
+      metalness: 0.72,
+      roughness: 0.32,
+    })
+    const foil = new THREE.MeshStandardMaterial({
+      color: 0xead18b,
+      metalness: 0.58,
+      roughness: 0.38,
+    })
+    const dark = new THREE.MeshStandardMaterial({
+      color: 0x28364a,
+      metalness: 0.52,
+      roughness: 0.42,
+    })
+    const blue = new THREE.MeshStandardMaterial({
+      color: 0x284d82,
+      metalness: 0.32,
+      roughness: 0.48,
+      side: THREE.DoubleSide,
+    })
+    const silver = new THREE.MeshStandardMaterial({
+      color: 0xc7ced7,
+      metalness: 0.8,
+      roughness: 0.28,
+    })
+
+    const addCylinder = (
+      material: THREE.Material,
+      topRadius: number,
+      bottomRadius: number,
+      height: number,
+      radialSegments: number,
+      position: THREE.Vector3,
+    ) => {
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(
+          topRadius * scale,
+          bottomRadius * scale,
+          height * scale,
+          radialSegments,
+        ),
+        material,
+      )
+      mesh.position.copy(position).multiplyScalar(scale)
+      parent.add(mesh)
+      return mesh
+    }
+    const addStrut = (
+      start: THREE.Vector3,
+      end: THREE.Vector3,
+      radius: number,
+      material: THREE.Material,
+    ) => {
+      const direction = end.clone().sub(start)
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(
+          radius * scale,
+          radius * scale * 1.25,
+          direction.length() * scale,
+          6,
+        ),
+        material,
+      )
+      mesh.position.copy(start).add(end).multiplyScalar(0.5 * scale)
+      mesh.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        direction.normalize(),
+      )
+      parent.add(mesh)
+      return mesh
+    }
+    const addPanel = (x: number, z: number) => {
+      const panel = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.7 * scale, 0.42 * scale),
+        blue,
+      )
+      panel.position.set(x * scale, 0.82 * scale, z * scale)
+      panel.rotation.y = z === 0 ? Math.PI / 2 : 0
+      parent.add(panel)
+      for (let index = -2; index <= 2; index += 1) {
+        const line = new THREE.Mesh(
+          new THREE.BoxGeometry(
+            0.006 * scale,
+            0.42 * scale,
+            0.006 * scale,
+          ),
+          silver,
+        )
+        line.position.set(
+          (x + (z === 0 ? 0 : index * 0.11)) * scale,
+          0.82 * scale,
+          z * scale + (z === 0 ? index * 0.14 : 0) * scale,
+        )
+        parent.add(line)
+      }
+    }
+
+    const apollo = landmarkId.startsWith('apollo-')
+    if (apollo) {
+      // Apollo LM: faceted ascent cabin above a wide octagonal descent stage.
+      addCylinder(gold, 0.49, 0.56, 0.43, 8, new THREE.Vector3(0, 0.95, 0))
+      addCylinder(foil, 0.35, 0.4, 0.42, 6, new THREE.Vector3(0, 1.38, 0))
+      addCylinder(dark, 0.14, 0.22, 0.24, 8, new THREE.Vector3(0, 0.62, 0))
+      addCylinder(silver, 0.075, 0.22, 0.24, 8, new THREE.Vector3(0, 0.43, 0))
+
+      for (let index = 0; index < 4; index += 1) {
+        const angle = (index / 4) * Math.PI * 2 + Math.PI / 4
+        const x = Math.cos(angle)
+        const z = Math.sin(angle)
+        const joint = new THREE.Vector3(x * 0.36, 0.8, z * 0.36)
+        const foot = new THREE.Vector3(x * 0.82, 0.06, z * 0.82)
+        addStrut(joint, foot, 0.035, silver)
+        addStrut(
+          new THREE.Vector3(x * 0.53, 0.52, z * 0.53),
+          foot.clone().lerp(joint, 0.28),
+          0.018,
+          gold,
+        )
+        const pad = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.17 * scale, 0.2 * scale, 0.055 * scale, 10),
+          silver,
+        )
+        pad.position.copy(foot).multiplyScalar(scale)
+        parent.add(pad)
+        const strutCover = new THREE.Mesh(
+          new THREE.ConeGeometry(0.07 * scale, 0.17 * scale, 6),
+          foil,
+        )
+        strutCover.position.set(x * 0.61 * scale, 0.68 * scale, z * 0.61 * scale)
+        strutCover.quaternion.setFromUnitVectors(
+          new THREE.Vector3(0, 1, 0),
+          new THREE.Vector3(x, 0.55, z).normalize(),
+        )
+        parent.add(strutCover)
+      }
+
+      const window = new THREE.Mesh(
+        new THREE.SphereGeometry(0.13 * scale, 10, 8),
+        dark,
+      )
+      window.position.set(0, 1.42 * scale, 0.34 * scale)
+      window.scale.set(1.25, 0.75, 0.35)
+      parent.add(window)
+      const dish = new THREE.Mesh(
+        new THREE.SphereGeometry(
+          0.25 * scale,
+          12,
+          8,
+          0,
+          Math.PI,
+          0,
+          Math.PI / 2,
+        ),
+        silver,
+      )
+      dish.position.set(0.48 * scale, 1.42 * scale, 0)
+      dish.rotation.z = -Math.PI / 2
+      parent.add(dish)
+      addStrut(
+        new THREE.Vector3(0.42, 1.4, 0),
+        new THREE.Vector3(0.55, 1.4, 0),
+        0.018,
+        silver,
+      )
+      return
+    }
+
+    // Robotic lander: faceted instrument deck, deployable panels and tripod legs.
+    addCylinder(gold, 0.43, 0.5, 0.48, 8, new THREE.Vector3(0, 1.02, 0))
+    addCylinder(foil, 0.3, 0.36, 0.3, 6, new THREE.Vector3(0, 1.4, 0))
+    addCylinder(dark, 0.12, 0.24, 0.2, 8, new THREE.Vector3(0, 0.68, 0))
+    addCylinder(silver, 0.055, 0.22, 0.22, 8, new THREE.Vector3(0, 0.49, 0))
+    for (let index = 0; index < 3; index += 1) {
+      const angle = (index / 3) * Math.PI * 2 + Math.PI / 2
+      const x = Math.cos(angle)
+      const z = Math.sin(angle)
+      const joint = new THREE.Vector3(x * 0.28, 0.84, z * 0.28)
+      const foot = new THREE.Vector3(x * 0.68, 0.055, z * 0.68)
+      addStrut(joint, foot, 0.034, silver)
+      addStrut(
+        new THREE.Vector3(x * 0.45, 0.5, z * 0.45),
+        foot.clone().lerp(joint, 0.22),
+        0.016,
+        gold,
+      )
+      const pad = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15 * scale, 0.18 * scale, 0.05 * scale, 8),
+        silver,
+      )
+      pad.position.copy(foot).multiplyScalar(scale)
+      parent.add(pad)
+    }
+    addPanel(-0.62, 0)
+    addPanel(0.62, 0)
+    const cameraMast = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018 * scale, 0.024 * scale, 0.55 * scale, 6),
+      silver,
+    )
+    cameraMast.position.set(0, 1.82 * scale, 0)
+    parent.add(cameraMast)
+    const cameraHead = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11 * scale, 8, 6),
+      dark,
+    )
+    cameraHead.position.set(0, 2.1 * scale, 0)
+    parent.add(cameraHead)
+    const dish = new THREE.Mesh(
+      new THREE.SphereGeometry(
+        0.2 * scale,
+        10,
+        7,
+        0,
+        Math.PI,
+        0,
+        Math.PI / 2,
+      ),
+      foil,
+    )
+    dish.position.set(-0.3 * scale, 1.55 * scale, 0)
+    dish.rotation.z = Math.PI / 2
+    parent.add(dish)
+
+  }
+
+  private addLunarRover(parent: THREE.Group): void {
+    const scale = 0.08
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+      color: 0xc9a251,
+      metalness: 0.62,
+      roughness: 0.38,
+    })
+    const wheelMaterial = new THREE.MeshStandardMaterial({
+      color: 0x35383b,
+      metalness: 0.52,
+      roughness: 0.62,
+    })
+    const metalMaterial = new THREE.MeshStandardMaterial({
+      color: 0xc9d0d9,
+      metalness: 0.8,
+      roughness: 0.3,
+    })
+    const panelMaterial = new THREE.MeshStandardMaterial({
+      color: 0x284d82,
+      metalness: 0.28,
+      roughness: 0.5,
+      side: THREE.DoubleSide,
+    })
+    const chassis = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.26 * scale, 0.34 * scale, 0.16 * scale, 8),
+      bodyMaterial,
+    )
+    chassis.position.y = 0.36 * scale
+    parent.add(chassis)
+
+    const wheelGeometry = new THREE.CylinderGeometry(
+      0.22 * scale,
+      0.22 * scale,
+      0.1 * scale,
+      12,
+    )
+    for (const side of [-1, 1]) {
+      for (const x of [-0.45, 0, 0.45]) {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial)
+        wheel.rotation.z = Math.PI / 2
+        wheel.position.set(x * scale, 0.22 * scale, side * 0.42 * scale)
+        parent.add(wheel)
+        const axle = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.018 * scale, 0.018 * scale, 0.36 * scale, 5),
+          metalMaterial,
+        )
+        axle.rotation.x = Math.PI / 2
+        axle.position.set(x * scale, 0.22 * scale, side * 0.2 * scale)
+        parent.add(axle)
+      }
+    }
+
+    const deck = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.82 * scale, 0.62 * scale),
+      panelMaterial,
+    )
+    deck.rotation.x = -Math.PI / 2
+    deck.position.y = 0.49 * scale
+    parent.add(deck)
+    const mast = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.025 * scale, 0.035 * scale, 0.56 * scale, 6),
+      metalMaterial,
+    )
+    mast.position.set(0, 0.78 * scale, 0)
+    parent.add(mast)
+    const stereoCamera = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1 * scale, 8, 6),
+      bodyMaterial,
+    )
+    stereoCamera.position.set(0, 1.08 * scale, 0)
+    parent.add(stereoCamera)
+    for (const side of [-1, 1]) {
+      const arm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018 * scale, 0.018 * scale, 0.48 * scale, 5),
+        metalMaterial,
+      )
+      arm.rotation.z = side * Math.PI / 2.8
+      arm.position.set(side * 0.28 * scale, 0.37 * scale, 0)
+      parent.add(arm)
+    }
+  }
+
+  private createLunarOrbiters(anchor: THREE.Group, diameter: number): void {
+    const moonRadius = diameter / 2
+
+    for (const orbiter of lunarOrbiters) {
+      const orbitalPlane = new THREE.Group()
+      orbitalPlane.rotation.z = THREE.MathUtils.degToRad(
+        orbiter.inclinationDegrees,
+      )
+      anchor.add(orbitalPlane)
+
+      const orbitRadius = moonRadius * orbiter.orbitalRadius
+      const pivot = new THREE.Group()
+      orbitalPlane.add(pivot)
+      const spacecraft = new THREE.Group()
+      spacecraft.position.x = orbitRadius
+      pivot.add(spacecraft)
+      this.addOrbiterSpacecraft(spacecraft, orbiter.id)
+
+      const labelElement = document.createElement('div')
+      labelElement.className = 'lunar-orbiter-label'
+      labelElement.dataset.orbiterId = orbiter.id
+      labelElement.textContent = orbiter.name
+      labelElement.setAttribute('aria-hidden', 'true')
+      const label = new CSS2DObject(labelElement)
+      label.position.set(0, 0.22, 0)
+      spacecraft.add(label)
+      this.lunarOrbiterLabels.push(label)
+      this.lunarOrbiterModels.push({
+        pivot,
+        spacecraft,
+        orbitalPeriodDays: orbiter.orbitalPeriodDays,
+        phaseRadians: orbiter.phaseRadians,
+      })
+      this.lunarOrbiterOrbitLines.push(
+        this.addOrbitLine(orbitRadius, orbitalPlane),
+      )
+    }
+  }
+
+  private addOrbiterSpacecraft(parent: THREE.Group, orbiterId: string): void {
+    const gold = new THREE.MeshStandardMaterial({
+      color: 0xc99a43,
+      metalness: 0.72,
+      roughness: 0.32,
+    })
+    const foil = new THREE.MeshStandardMaterial({
+      color: 0xe7d39a,
+      metalness: 0.58,
+      roughness: 0.38,
+    })
+    const blue = new THREE.MeshStandardMaterial({
+      color: 0x28518b,
+      metalness: 0.3,
+      roughness: 0.48,
+      side: THREE.DoubleSide,
+    })
+    const silver = new THREE.MeshStandardMaterial({
+      color: 0xc9d0d9,
+      metalness: 0.8,
+      roughness: 0.28,
+    })
+    const dark = new THREE.MeshStandardMaterial({
+      color: 0x243142,
+      metalness: 0.55,
+      roughness: 0.38,
+    })
+
+    const addMesh = (
+      geometry: THREE.BufferGeometry,
+      material: THREE.Material,
+      position = new THREE.Vector3(),
+      rotation = new THREE.Euler(),
+    ) => {
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.position.copy(position)
+      mesh.rotation.copy(rotation)
+      parent.add(mesh)
+      return mesh
+    }
+    const addPanel = (
+      x: number,
+      z: number,
+      width: number,
+      height: number,
+    ) => {
+      addMesh(
+        new THREE.PlaneGeometry(width, height),
+        blue,
+        new THREE.Vector3(x, 0, z),
+        new THREE.Euler(0, Math.PI / 2, 0),
+      )
+      for (let index = -1; index <= 1; index += 1) {
+        addMesh(
+          new THREE.BoxGeometry(0.003, height, 0.002),
+          silver,
+          new THREE.Vector3(x, 0, z + index * height * 0.25),
+        )
+      }
+      addMesh(
+        new THREE.BoxGeometry(0.008, 0.008, height + 0.025),
+        foil,
+        new THREE.Vector3(x, 0, z),
+      )
+    }
+    const addDish = (position: THREE.Vector3, scale: number) => {
+      const dish = addMesh(
+        new THREE.SphereGeometry(
+          scale,
+          12,
+          8,
+          0,
+          Math.PI,
+          0,
+          Math.PI / 2,
+        ),
+        silver,
+        position,
+        new THREE.Euler(0, 0, -Math.PI / 2),
+      )
+      dish.scale.z = 0.35
+      const support = addMesh(
+        new THREE.CylinderGeometry(0.004, 0.004, 0.065, 5),
+        foil,
+        position.clone().add(new THREE.Vector3(-scale * 0.8, 0, 0)),
+        new THREE.Euler(0, 0, Math.PI / 2),
+      )
+      support.userData.orbiterPart = true
+    }
+
+    if (orbiterId === 'lro') {
+      addMesh(
+        new THREE.CylinderGeometry(0.045, 0.052, 0.14, 8),
+        foil,
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Euler(0, 0, Math.PI / 2),
+      )
+      addMesh(
+        new THREE.ConeGeometry(0.052, 0.07, 8),
+        gold,
+        new THREE.Vector3(0.1, 0, 0),
+        new THREE.Euler(0, 0, -Math.PI / 2),
+      )
+      addPanel(-0.03, -0.17, 0.16, 0.12)
+      addPanel(-0.03, 0.17, 0.16, 0.12)
+      addDish(new THREE.Vector3(0.04, 0.075, 0), 0.058)
+      addMesh(
+        new THREE.CylinderGeometry(0.009, 0.014, 0.06, 6),
+        dark,
+        new THREE.Vector3(-0.06, -0.055, 0),
+      )
+    } else if (orbiterId === 'kaguya') {
+      addMesh(
+        new THREE.CylinderGeometry(0.052, 0.052, 0.12, 10),
+        gold,
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Euler(0, 0, Math.PI / 2),
+      )
+      addMesh(
+        new THREE.CylinderGeometry(0.035, 0.04, 0.08, 8),
+        foil,
+        new THREE.Vector3(0.085, 0, 0),
+        new THREE.Euler(0, 0, Math.PI / 2),
+      )
+      addPanel(-0.015, -0.18, 0.17, 0.1)
+      addPanel(-0.015, 0.18, 0.17, 0.1)
+      addDish(new THREE.Vector3(0.015, 0.075, 0), 0.045)
+      addMesh(
+        new THREE.CylinderGeometry(0.003, 0.003, 0.23, 5),
+        silver,
+        new THREE.Vector3(-0.16, 0, 0),
+        new THREE.Euler(0, 0, Math.PI / 2),
+      )
+      addMesh(
+        new THREE.SphereGeometry(0.012, 6, 5),
+        dark,
+        new THREE.Vector3(-0.28, 0, 0),
+      )
+    } else {
+      addMesh(
+        new THREE.CylinderGeometry(0.055, 0.06, 0.09, 8),
+        gold,
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Euler(0, 0, Math.PI / 2),
+      )
+      addMesh(
+        new THREE.CylinderGeometry(0.038, 0.044, 0.065, 6),
+        foil,
+        new THREE.Vector3(0.065, 0, 0),
+        new THREE.Euler(0, 0, Math.PI / 2),
+      )
+      addPanel(-0.01, 0.17, 0.13, 0.16)
+      addDish(new THREE.Vector3(0, 0.08, 0), 0.048)
+      addMesh(
+        new THREE.ConeGeometry(0.02, 0.06, 8),
+        dark,
+        new THREE.Vector3(-0.08, -0.045, 0),
+        new THREE.Euler(0, 0, Math.PI / 2),
+      )
+      addMesh(
+        new THREE.CylinderGeometry(0.003, 0.003, 0.1, 5),
+        silver,
+        new THREE.Vector3(-0.11, 0, 0),
+        new THREE.Euler(0, 0, Math.PI / 2),
+      )
+    }
+
+  }
+
+  private removeLunarOrbiters(): void {
+    for (const { pivot } of this.lunarOrbiterModels) {
+      pivot.parent?.remove(pivot)
+      pivot.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose()
+          const materials = Array.isArray(child.material)
+            ? child.material
+            : [child.material]
+          materials.forEach((material) => material.dispose())
+        }
+      })
+    }
+    this.lunarOrbiterModels = []
+    this.lunarOrbiterLabels = []
+    for (const line of this.lunarOrbiterOrbitLines) {
+      line.parent?.remove(line)
+      line.geometry.dispose()
+      const materials = Array.isArray(line.material)
+        ? line.material
+        : [line.material]
+      materials.forEach((material) => material.dispose())
+      const index = this.orbitLines.indexOf(line)
+      if (index >= 0) this.orbitLines.splice(index, 1)
+    }
+    this.lunarOrbiterOrbitLines = []
+  }
+
   private createBodyLabel(
     model: THREE.Group,
     name: string,
@@ -451,7 +1077,7 @@ export class SceneManager {
     radius: number,
     parent: THREE.Object3D,
     center = new THREE.Vector3(),
-  ): void {
+  ): THREE.LineLoop {
     const points: THREE.Vector3[] = []
     for (let i = 0; i < 128; i += 1) {
       const angle = (i / 128) * Math.PI * 2
@@ -474,6 +1100,7 @@ export class SceneManager {
     line.visible = this.auxiliaryLinesVisible
     parent.add(line)
     this.orbitLines.push(line)
+    return line
   }
 
   private updateLandmarkLabels(): void {
@@ -489,6 +1116,13 @@ export class SceneManager {
         .applyMatrix4(this.currentModel.matrixWorld)
       const towardCamera = this.camera.position.clone().sub(worldPosition).normalize()
       label.element.style.display = normal.dot(towardCamera) > 0.08 ? 'flex' : 'none'
+    }
+  }
+
+  private updateLunarOrbiterLabels(): void {
+    for (const label of this.lunarOrbiterLabels) {
+      label.element.style.display =
+        this.activeBodyId === 'moon' ? 'block' : 'none'
     }
   }
 
@@ -544,6 +1178,7 @@ export class SceneManager {
   }
 
   private clearSystem(): void {
+    this.removeLunarOrbiters()
     for (const model of this.bodyModels.values()) {
       model.parent?.remove(model)
       this.modelLoader.dispose(model)
@@ -570,6 +1205,7 @@ export class SceneManager {
     this.activeBodyId = ''
     this.isSystemView = false
     this.landmarkLabels = []
+    this.lunarOrbiterModels = []
     this.focusedLandmarkId = null
     this.focusedWorldPosition = null
     this.focusedBodyWorldPosition = null

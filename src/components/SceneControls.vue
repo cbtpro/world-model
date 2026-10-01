@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useUniverseStore } from '@/stores/universe'
 
 const store = useUniverseStore()
+const isCollapsed = ref(false)
 const simulationDate = computed(() => {
   const timestamp =
     Date.UTC(2026, 0, 1) + store.simulationDay * 24 * 60 * 60 * 1000
@@ -18,9 +19,28 @@ function changeZoom(amount: number) {
 </script>
 
 <template>
-  <section class="scene-controls" aria-label="场景控制面板">
-    <h2>场景控制</h2>
+  <section
+    class="scene-controls"
+    :class="{ collapsed: isCollapsed }"
+    aria-label="场景控制面板"
+  >
+    <header class="controls-header">
+      <h2>场景控制</h2>
+      <button
+        type="button"
+        class="collapse-button"
+        :aria-expanded="!isCollapsed"
+        :aria-label="isCollapsed ? '展开场景控制' : '折叠场景控制'"
+        @click="isCollapsed = !isCollapsed"
+      >
+        <span aria-hidden="true">{{ isCollapsed ? '展开' : '折叠' }}</span>
+        <span class="collapse-icon" aria-hidden="true">
+          {{ isCollapsed ? '⌃' : '⌄' }}
+        </span>
+      </button>
+    </header>
 
+    <div v-show="!isCollapsed" class="controls-content">
     <div class="control-row">
       <label for="camera-distance">视距</label>
       <div class="range-control">
@@ -111,23 +131,60 @@ function changeZoom(amount: number) {
         重置视角
       </button>
     </div>
+    </div>
   </section>
 </template>
 
 <style scoped>
 .scene-controls {
   width: 260px;
-  padding: 14px 16px;
+  padding: 0 16px 14px;
   color: var(--color-text);
   background: var(--color-panel);
   border: 1px solid var(--color-border);
   pointer-events: auto;
 }
 
+.controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.scene-controls.collapsed {
+  padding-bottom: 0;
+}
+
+.controls-content {
+  padding-bottom: 1px;
+}
+
 h2 {
-  margin-bottom: 12px;
   font-size: 14px;
   font-weight: 600;
+}
+
+.collapse-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  color: var(--color-text-dim);
+  background: rgba(40, 60, 90, 0.65);
+  border: 1px solid var(--color-border);
+  font-size: 11px;
+}
+
+.collapse-button:hover {
+  color: var(--color-text);
+  background: var(--color-accent-dim);
+}
+
+.collapse-icon {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .control-row {
