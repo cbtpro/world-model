@@ -1,12 +1,11 @@
 earth_small.glb
 
-This self-contained GLB contains a generated sphere mesh textured with NASA's
-Blue Marble 2007 East and West imagery. The source hemispheres were downloaded
-from NASA Image and Video Library:
+This self-contained GLB has a generated sphere mesh and an equirectangular,
+daytime-only Blue Marble Next Generation surface texture. Lighting and the
+day/night terminator are rendered dynamically from the Sun's directional light.
 
-- https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e002130/GSFC_20171208_Archive_e002130~medium.jpg
-- https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e002131/GSFC_20171208_Archive_e002131~medium.jpg
+Texture source: NASA Blue Marble Next Generation, land/ocean/ice 2048:
+https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57730/land_ocean_ice_2048.png
 
-Imagery credit: NASA/GSFC/Reto Stöckli. The model mesh and texture reprojection
-were generated for this project. NASA media use guidance:
+NASA media use guidance:
 https://www.nasa.gov/nasa-brand-center/images-and-media/

@@ -20,8 +20,8 @@ export interface SceneBodyModel {
   visualDistanceFromSun: number
   visualDistanceFromPrimary?: number
   primaryId?: string
-  rotationSpeed: number
-  orbitalSpeed: number
+  rotationPeriodDays: number
+  orbitalPeriodDays: number
   includeLunarLandmarks?: boolean
 }
 
@@ -42,17 +42,19 @@ export class SceneManager {
   private controls: OrbitControls
   private starfield: Starfield
   private axes: UniverseAxes
+  private sunLight: THREE.DirectionalLight
   private modelLoader: ModelLoader
   private currentModel: THREE.Group | null = null
   private bodyModels = new Map<string, THREE.Group>()
   private bodyAnchors = new Map<string, THREE.Group>()
-  private bodyPositions = new Map<string, THREE.Vector3>()
+  private bodyOrbitPivots = new Map<string, THREE.Group>()
   private bodyModelUrls = new Map<string, string>()
   private bodyDiameters = new Map<string, number>()
-  private bodyRotationSpeeds = new Map<string, number>()
-  private bodyOrbitalSpeeds = new Map<string, number>()
+  private bodyRotationPeriods = new Map<string, number>()
+  private bodyOrbitalPeriods = new Map<string, number>()
   private activeBodyId = ''
   private isSystemView = false
+  private auxiliaryLinesVisible = true
   private orbitLines: THREE.LineLoop[] = []
   private focusedBodyWorldPosition: THREE.Vector3 | null = null
   private animationId: number | null = null
@@ -94,11 +96,11 @@ export class SceneManager {
     this.controls.maxDistance = 300
     this.controls.rotateSpeed = 0.5
 
-    // 灯光：环境光（暗面微亮）+ 方向光（模拟阳光）
-    this.scene.add(new THREE.AmbientLight(0x404060, 1.2))
-    const sunLight = new THREE.DirectionalLight(0xffffff, 2.5)
-    sunLight.position.set(50, 30, 40)
-    this.scene.add(sunLight)
+    // 环境光只保留微弱填充光；太阳方向光负责实时昼夜明暗。
+    this.scene.add(new THREE.AmbientLight(0x404060, 0.12))
+    this.sunLight = new THREE.DirectionalLight(0xffffff, 3)
+    this.sunLight.position.set(0, 0, 0)
+    this.scene.add(this.sunLight, this.sunLight.target)
 
     // 星空与坐标系
     this.starfield = new Starfield()
@@ -146,34 +148,33 @@ export class SceneManager {
         throw new Error(`找不到主天体「${body.primaryId}」`)
       }
       if (parentAnchor) {
-        parentAnchor.add(anchor)
-        anchor.position.copy(this.bodyPositions.get(body.primaryId!)!)
+        const orbitPivot = new THREE.Group()
+        parentAnchor.add(orbitPivot)
+        orbitPivot.add(anchor)
+        this.bodyOrbitPivots.set(body.id, orbitPivot)
       } else {
         this.scene.add(anchor)
       }
 
       const position = new THREE.Vector3(
-        body.primaryId
-          ? body.visualDistanceFromPrimary ?? 0
-          : body.visualDistanceFromSun,
+        body.visualDistanceFromPrimary ?? body.visualDistanceFromSun,
         0,
         0,
       )
+      anchor.position.copy(position)
       const model = await this.modelLoader.load(
         body.modelUrl,
         (progress) =>
           onProgress?.(((loadedCount + progress / 100) / bodies.length) * 100),
         body.visualDiameter,
       )
-      model.position.copy(position)
       anchor.add(model)
       this.bodyAnchors.set(body.id, anchor)
-      this.bodyPositions.set(body.id, position)
       this.bodyModels.set(body.id, model)
       this.bodyModelUrls.set(body.id, body.modelUrl)
       this.bodyDiameters.set(body.id, body.visualDiameter)
-      this.bodyRotationSpeeds.set(body.id, body.rotationSpeed)
-      this.bodyOrbitalSpeeds.set(body.id, body.orbitalSpeed)
+      this.bodyRotationPeriods.set(body.id, body.rotationPeriodDays)
+      this.bodyOrbitalPeriods.set(body.id, body.orbitalPeriodDays)
       if (body.includeLunarLandmarks) {
         this.createLandmarkLabels(model, body.visualDiameter)
       }
@@ -183,6 +184,8 @@ export class SceneManager {
     }
 
     this.createOrbitLines(bodies)
+    this.setSimulationTime(0)
+    this.updateSunlightDirection()
     onProgress?.(100)
   }
 
@@ -196,8 +199,6 @@ export class SceneManager {
       throw new Error(`无法替换未加载的天体模型「${body.id}」`)
     }
 
-    const position = this.bodyPositions.get(body.id)
-    if (!position) throw new Error(`找不到天体「${body.id}」的场景坐标`)
     anchor.remove(previous)
     this.modelLoader.dispose(previous)
     if (body.id === 'moon') this.landmarkLabels = []
@@ -207,12 +208,11 @@ export class SceneManager {
       onProgress,
       body.visualDiameter,
     )
-    model.position.copy(position)
     anchor.add(model)
     this.bodyModels.set(body.id, model)
     this.bodyModelUrls.set(body.id, body.modelUrl)
     this.bodyDiameters.set(body.id, body.visualDiameter)
-    this.bodyRotationSpeeds.set(body.id, body.rotationSpeed)
+    this.bodyRotationPeriods.set(body.id, body.rotationPeriodDays)
     if (body.includeLunarLandmarks) {
       this.createLandmarkLabels(model, body.visualDiameter)
     }
@@ -226,6 +226,24 @@ export class SceneManager {
 
   getBodyModelUrl(bodyId: string): string | undefined {
     return this.bodyModelUrls.get(bodyId)
+  }
+
+  getBodyCoordinates(bodyId: string): THREE.Vector3 | null {
+    const model = this.bodyModels.get(bodyId)
+    if (!model) return null
+    return model.getWorldPosition(new THREE.Vector3())
+  }
+
+  setSimulationTime(days: number): void {
+    for (const [bodyId, model] of this.bodyModels) {
+      const period = this.bodyRotationPeriods.get(bodyId)
+      model.rotation.y = period ? (days / period) * Math.PI * 2 : 0
+    }
+    for (const [bodyId, anchor] of this.bodyOrbitPivots) {
+      const period = this.bodyOrbitalPeriods.get(bodyId)
+      anchor.rotation.y = period ? (days / period) * Math.PI * 2 : 0
+    }
+    this.updateSunlightDirection()
   }
 
   setActiveBody(bodyId: string): number {
@@ -266,9 +284,12 @@ export class SceneManager {
     }
   }
 
-  // 设置当前选中天体的自转速度
-  setRotationSpeed(speed: number): void {
-    this.bodyRotationSpeeds.set(this.activeBodyId, speed)
+  setAuxiliaryLinesVisible(visible: boolean): void {
+    this.auxiliaryLinesVisible = visible
+    this.axes.group.visible = visible
+    for (const line of this.orbitLines) {
+      line.visible = visible
+    }
   }
 
   setCameraDistance(distance: number): void {
@@ -340,12 +361,7 @@ export class SceneManager {
   private startRenderLoop(): void {
     const animate = () => {
       this.animationId = requestAnimationFrame(animate)
-      for (const [bodyId, model] of this.bodyModels) {
-        model.rotation.y += this.bodyRotationSpeeds.get(bodyId) ?? 0
-      }
-      for (const [bodyId, anchor] of this.bodyAnchors) {
-        anchor.rotation.y += this.bodyOrbitalSpeeds.get(bodyId) ?? 0
-      }
+      this.updateSunlightDirection()
       this.updateLandmarkLabels()
       if (this.focusedWorldPosition) this.followFocusedLandmark()
       else this.followFocusedBody()
@@ -354,6 +370,18 @@ export class SceneManager {
       this.cssRenderer.render(this.scene, this.camera)
     }
     animate()
+  }
+
+  private updateSunlightDirection(): void {
+    const sun = this.bodyModels.get('sun')
+    const earth = this.bodyModels.get('earth')
+    if (!sun || !earth) return
+
+    sun.updateWorldMatrix(true, false)
+    earth.updateWorldMatrix(true, false)
+    sun.getWorldPosition(this.sunLight.position)
+    earth.getWorldPosition(this.sunLight.target.position)
+    this.sunLight.target.updateMatrixWorld()
   }
 
   private createLandmarkLabels(model: THREE.Group, diameter: number): void {
@@ -407,19 +435,14 @@ export class SceneManager {
 
   private createOrbitLines(bodies: SceneBodyModel[]): void {
     for (const body of bodies) {
-      if (body.visualDistanceFromSun > 0) {
-        this.addOrbitLine(body.visualDistanceFromSun, this.scene)
-      }
-      if (body.primaryId && body.visualDistanceFromPrimary) {
-        const parentAnchor = this.bodyAnchors.get(body.primaryId)
-        const center = this.bodyPositions.get(body.primaryId)
-        if (parentAnchor && center) {
-          this.addOrbitLine(
-            body.visualDistanceFromPrimary,
-            parentAnchor,
-            center,
-          )
-        }
+      const orbitRadius =
+        body.visualDistanceFromPrimary ?? body.visualDistanceFromSun
+      if (!orbitRadius) continue
+      const parent = body.primaryId
+        ? this.bodyAnchors.get(body.primaryId)
+        : this.scene
+      if (parent) {
+        this.addOrbitLine(orbitRadius, parent)
       }
     }
   }
@@ -448,6 +471,7 @@ export class SceneManager {
         opacity: 0.45,
       }),
     )
+    line.visible = this.auxiliaryLinesVisible
     parent.add(line)
     this.orbitLines.push(line)
   }
@@ -536,11 +560,11 @@ export class SceneManager {
     }
     this.bodyModels.clear()
     this.bodyAnchors.clear()
-    this.bodyPositions.clear()
+    this.bodyOrbitPivots.clear()
     this.bodyModelUrls.clear()
     this.bodyDiameters.clear()
-    this.bodyRotationSpeeds.clear()
-    this.bodyOrbitalSpeeds.clear()
+    this.bodyRotationPeriods.clear()
+    this.bodyOrbitalPeriods.clear()
     this.orbitLines = []
     this.currentModel = null
     this.activeBodyId = ''

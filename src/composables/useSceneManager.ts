@@ -4,6 +4,8 @@ import { useUniverseStore } from '@/stores/universe'
 import { SceneManager, type SceneBodyModel } from '@/three/SceneManager'
 import { bodyRegistry } from '@/config/bodies'
 
+const SIMULATION_YEAR_DAYS = 365.25
+
 export function useSceneManager() {
   const containerRef = ref<HTMLElement | null>(null)
   const store = useUniverseStore()
@@ -12,6 +14,30 @@ export function useSceneManager() {
   let sceneManager: SceneManager | null = null
   let loadingPromise: Promise<void> | null = null
   let navigationSequence = 0
+  let animationFrameId: number | null = null
+  let previousFrameTime: number | null = null
+
+  function updateSelectedCoordinates(): void {
+    const coordinates = sceneManager?.getBodyCoordinates(store.currentBodyId)
+    if (!coordinates) return
+    store.simulationCoordinates = {
+      x: coordinates.x,
+      y: coordinates.y,
+      z: coordinates.z,
+    }
+  }
+
+  function animateTime(timestamp: number): void {
+    if (previousFrameTime !== null && store.isTimePlaying && !loadingPromise) {
+      const elapsedSeconds = Math.min((timestamp - previousFrameTime) / 1000, 0.25)
+      store.simulationDay =
+        (store.simulationDay +
+          elapsedSeconds * store.simulationSpeed) %
+        SIMULATION_YEAR_DAYS
+    }
+    previousFrameTime = timestamp
+    animationFrameId = requestAnimationFrame(animateTime)
+  }
 
   function createSceneBody(
     bodyId: string,
@@ -28,8 +54,8 @@ export function useSceneManager() {
       visualDistanceFromSun: body.visualDistanceFromSun ?? 0,
       visualDistanceFromPrimary: body.visualDistanceFromPrimary,
       primaryId: body.primaryId,
-      rotationSpeed: body.rotationSpeed ?? 0,
-      orbitalSpeed: body.visualOrbitalSpeed ?? 0,
+      rotationPeriodDays: body.rotationPeriodDays ?? 1,
+      orbitalPeriodDays: body.orbitalPeriodDays ?? 0,
       includeLunarLandmarks: body.id === 'moon',
     }
   }
@@ -62,10 +88,10 @@ export function useSceneManager() {
         if (!sceneManager) return
         sceneManager.setActiveBody(store.currentBodyId)
         store.cameraDistance = sceneManager.resetView()
+        sceneManager.setSimulationTime(store.simulationDay)
         sceneManager.setFocusedLandmark(store.selectedLandmarkId)
-        sceneManager.setRotationSpeed(
-          store.rotationPaused ? 0 : store.rotationSpeed,
-        )
+        updateSelectedCoordinates()
+        store.isTimePlaying = true
       })
       .catch((err) => {
         console.error('天体场景加载失败:', err)
@@ -75,6 +101,7 @@ export function useSceneManager() {
         if (loadingPromise === initialLoad) loadingPromise = null
       })
     loadingPromise = initialLoad
+    animationFrameId = requestAnimationFrame(animateTime)
   })
 
   watch(
@@ -90,19 +117,26 @@ export function useSceneManager() {
   )
 
   watch(
+    () => store.simulationDay,
+    (day) => {
+      sceneManager?.setSimulationTime(day)
+      updateSelectedCoordinates()
+    },
+  )
+
+  watch(
+    () => store.currentBodyId,
+    updateSelectedCoordinates,
+  )
+
+  watch(
     () => store.cameraDistance,
     (distance) => sceneManager?.setCameraDistance(distance),
   )
 
   watch(
-    () => store.rotationSpeed,
-    (speed) => sceneManager?.setRotationSpeed(store.rotationPaused ? 0 : speed),
-  )
-
-  watch(
-    () => store.rotationPaused,
-    (paused) =>
-      sceneManager?.setRotationSpeed(paused ? 0 : store.rotationSpeed),
+    () => store.auxiliaryLinesVisible,
+    (visible) => sceneManager?.setAuxiliaryLinesVisible(visible),
   )
 
   watch(
@@ -126,10 +160,9 @@ export function useSceneManager() {
     const body = store.currentBody
     const variant = store.currentVariant
     store.cameraDistance = sceneManager.setActiveBody(body.id)
-    sceneManager.setRotationSpeed(
-      store.rotationPaused ? 0 : store.rotationSpeed,
-    )
+    sceneManager.setSimulationTime(store.simulationDay)
     sceneManager.setFocusedLandmark(store.selectedLandmarkId)
+    updateSelectedCoordinates()
     if (sceneManager.getBodyModelUrl(body.id) === variant.modelUrl) return
 
     store.startModelLoading(`加载「${variant.name}」模型`)
@@ -140,7 +173,9 @@ export function useSceneManager() {
       )
       .then(() => {
         if (sequence === navigationSequence) {
+          sceneManager?.setSimulationTime(store.simulationDay)
           sceneManager?.setFocusedLandmark(store.selectedLandmarkId)
+          updateSelectedCoordinates()
         }
       })
       .catch((err) => {
@@ -157,6 +192,9 @@ export function useSceneManager() {
   }
 
   onUnmounted(() => {
+    if (animationFrameId !== null) {
+      cancelAnimationFrame(animationFrameId)
+    }
     sceneManager?.dispose()
     sceneManager = null
   })

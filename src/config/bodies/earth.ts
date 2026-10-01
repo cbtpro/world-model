@@ -9,10 +9,12 @@ export const earth: CelestialBody = {
   defaultVariantId: 'color',
   radiusKm: 6371,
   distanceFromSunKm: 149600000, // 平均日地距离 ~ 1 AU
+  primaryId: 'sun',
   visualDiameter: 4,
-  visualDistanceFromSun: 50,
-  visualOrbitalSpeed: 0.00015,
-  rotationSpeed: 0.0012,
+  visualDistanceFromSun: 0,
+  visualDistanceFromPrimary: 50,
+  orbitalPeriodDays: 365.256,
+  rotationPeriodDays: 0.99727,
   variants: [
     {
       id: 'color',
