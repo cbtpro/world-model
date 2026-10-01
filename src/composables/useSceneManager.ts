@@ -56,6 +56,7 @@ export function useSceneManager() {
       primaryId: body.primaryId,
       rotationPeriodDays: body.rotationPeriodDays ?? 1,
       orbitalPeriodDays: body.orbitalPeriodDays ?? 0,
+      tidallyLockedToPrimary: body.tidallyLockedToPrimary,
       includeLunarLandmarks: body.id === 'moon',
     }
   }

@@ -49,6 +49,8 @@ export interface CelestialBody {
   visualDistanceFromPrimary?: number
   /** 公转周期（地球日） */
   orbitalPeriodDays?: number
+  /** 是否被主天体潮汐锁定；自转随主天体方向，不单独旋转 */
+  tidallyLockedToPrimary?: boolean
 }
 
 // 天体注册表：聚合所有已注册天体
