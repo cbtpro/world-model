@@ -1,4 +1,4 @@
-export type LunarLandmarkKind = 'crater' | 'mission'
+export type LunarLandmarkKind = 'crater' | 'mission' | 'moment'
 
 export interface LunarLandmark {
   id: string
@@ -8,6 +8,7 @@ export interface LunarLandmark {
   longitude: number
   coordinates: string
   detail: string
+  labelOffsetY?: number
 }
 
 export const lunarLandmarks: LunarLandmark[] = [
@@ -46,6 +47,16 @@ export const lunarLandmarks: LunarLandmark[] = [
     longitude: 23.473,
     coordinates: '北纬 0.674° · 东经 23.473°',
     detail: '1969 年人类首次载人登月，着陆于静海。',
+  },
+  {
+    id: 'armstrong-footprint',
+    name: '阿姆斯特朗的第一步',
+    kind: 'moment',
+    latitude: 0.674,
+    longitude: 23.473,
+    coordinates: '阿波罗 11 号着陆区（具体脚印坐标未单独测定）',
+    detail: '1969 年 7 月 20 日，尼尔·阿姆斯特朗在鹰号登月舱梯脚踏上月面。标记使用阿波罗 11 号着陆区坐标。',
+    labelOffsetY: 12,
   },
   {
     id: 'apollo-12',
@@ -109,6 +120,42 @@ export const lunarLandmarks: LunarLandmark[] = [
     longitude: 0,
     coordinates: '北纬约 29.1° · 月面正面',
     detail: '1959 年首个抵达月球表面的人造探测器，撞击于雨海区域。',
+  },
+  {
+    id: 'change-3',
+    name: '嫦娥三号 / 玉兔一号',
+    kind: 'mission',
+    latitude: 44.12,
+    longitude: -19.51,
+    coordinates: '北纬约 44.12° · 西经约 19.51°',
+    detail: '2013 年着陆于雨海北部，是中国首次月面软着陆任务。',
+  },
+  {
+    id: 'luna-16',
+    name: '月球 16 号',
+    kind: 'mission',
+    latitude: -0.68,
+    longitude: 56.3,
+    coordinates: '南纬约 0.68° · 东经约 56.3°',
+    detail: '1970 年首次由无人探测器自动采集月壤并返回地球，着陆于丰富海。',
+  },
+  {
+    id: 'luna-24',
+    name: '月球 24 号',
+    kind: 'mission',
+    latitude: 12.75,
+    longitude: 62.2,
+    coordinates: '北纬约 12.75° · 东经约 62.2°',
+    detail: '1976 年在危海区域采样并返回月壤，是 2020 年前最后一次成功月球采样返回任务。',
+  },
+  {
+    id: 'change-5',
+    name: '嫦娥五号',
+    kind: 'mission',
+    latitude: 43.06,
+    longitude: -51.92,
+    coordinates: '北纬约 43.06° · 西经约 51.92°',
+    detail: '2020 年着陆于风暴洋吕姆克山脉附近，并完成月球采样返回。',
   },
   {
     id: 'change-4',

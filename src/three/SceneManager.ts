@@ -6,11 +6,11 @@ import {
 } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { Starfield } from './Starfield'
 import { UniverseAxes } from './UniverseAxes'
-import { ModelLoader } from './ModelLoader'
+import { ModelLoader, NORMALIZED_MODEL_DIAMETER } from './ModelLoader'
 import type { ProgressCallback } from './types'
 import { lunarLandmarks, type LunarLandmark } from '@/config/lunarLandmarks'
 
-const LANDMARK_RADIUS = 12.08
+const LANDMARK_SURFACE_OFFSET = 0.08
 
 interface LandmarkLabel {
   landmark: LunarLandmark
@@ -155,6 +155,10 @@ export class SceneManager {
   }
 
   private createLandmarkLabels(model: THREE.Group): void {
+    const rootScale = Math.abs(model.scale.x)
+    const localRadius =
+      (NORMALIZED_MODEL_DIAMETER / 2 + LANDMARK_SURFACE_OFFSET) / rootScale
+
     this.landmarkLabels = lunarLandmarks.map((landmark) => {
       const latitude = THREE.MathUtils.degToRad(landmark.latitude)
       const longitude = THREE.MathUtils.degToRad(landmark.longitude)
@@ -162,7 +166,7 @@ export class SceneManager {
         Math.cos(latitude) * Math.sin(longitude),
         Math.sin(latitude),
         Math.cos(latitude) * Math.cos(longitude),
-      ).multiplyScalar(LANDMARK_RADIUS)
+      ).multiplyScalar(localRadius)
 
       const element = document.createElement('div')
       element.className = `lunar-landmark-label ${landmark.kind}`
@@ -170,7 +174,11 @@ export class SceneManager {
       const dot = document.createElement('span')
       dot.className = 'landmark-dot'
       const name = document.createElement('span')
+      name.className = 'landmark-name'
       name.textContent = landmark.name
+      if (landmark.labelOffsetY) {
+        name.style.transform = `translateY(${landmark.labelOffsetY}px)`
+      }
       element.append(dot, name)
 
       const label = new CSS2DObject(element)

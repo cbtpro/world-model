@@ -69,6 +69,10 @@ button {
   background: #ffd27a;
 }
 
+.lunar-landmark-label.moment .landmark-dot {
+  background: #ff9b75;
+}
+
 .lunar-landmark-label.selected {
   color: #fff;
   font-size: 13px;

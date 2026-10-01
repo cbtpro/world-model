@@ -3,6 +3,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import type { ProgressCallback } from './types'
 
+export const NORMALIZED_MODEL_DIAMETER = 12
+
 // 模型加载器（单一职责）：负责 GLB 加载与旧模型资源释放
 export class ModelLoader {
   private gltfLoader: GLTFLoader
@@ -26,18 +28,18 @@ export class ModelLoader {
     })
 
     const model = gltf.scene
-    this.normalizeModel(model, 12)
+    this.normalizeModel(model, NORMALIZED_MODEL_DIAMETER)
     this.currentModel = model
     return model
   }
 
-  // 标准化模型：居中 + 等比缩放至目标半径
-  private normalizeModel(model: THREE.Group, targetRadius: number): void {
+  // 标准化模型：居中 + 等比缩放至目标直径
+  private normalizeModel(model: THREE.Group, targetDiameter: number): void {
     const box = new THREE.Box3().setFromObject(model)
     const center = box.getCenter(new THREE.Vector3())
     const size = box.getSize(new THREE.Vector3())
     const maxDim = Math.max(size.x, size.y, size.z)
-    const scale = targetRadius / maxDim
+    const scale = targetDiameter / maxDim
 
     model.position.sub(center)
     model.scale.setScalar(scale)
