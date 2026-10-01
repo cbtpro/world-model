@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { bodyRegistry, DEFAULT_BODY_ID } from '@/config/bodies'
 
@@ -20,8 +20,8 @@ const routes: RouteRecordRaw[] = [
 ]
 
 export const router = createRouter({
-  // base 由 vite.config.ts 的 base 字段驱动，确保 GitHub Pages 子路径下路由正确
-  history: createWebHistory(import.meta.env.BASE_URL),
+  // Hash 路由不要求 GitHub Pages 为深层路径提供服务器端重写
+  history: createWebHashHistory(import.meta.env.BASE_URL),
   routes,
 })
 

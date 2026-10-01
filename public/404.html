@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>正在打开天体模型…</title>
+  </head>
+  <body>
+    <script>
+      const base = '/world-model/'
+      const route = location.pathname.startsWith(base)
+        ? location.pathname.slice(base.length)
+        : ''
+      const target = route
+        ? `${base}#/${route}${location.search}${location.hash}`
+        : `${base}#/`
+      location.replace(target)
+    </script>
+  </body>
+</html>
