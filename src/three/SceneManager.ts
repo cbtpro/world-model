@@ -55,6 +55,7 @@ export class SceneManager {
   private currentModel: THREE.Group | null = null
   private bodyModels = new Map<string, THREE.Group>()
   private bodyAnchors = new Map<string, THREE.Group>()
+  private bodyReplacementSequences = new Map<string, number>()
   private bodyOrbitPivots = new Map<string, THREE.Group>()
   private bodyModelUrls = new Map<string, string>()
   private bodyDiameters = new Map<string, number>()
@@ -212,6 +213,21 @@ export class SceneManager {
     if (!anchor || !previous) {
       throw new Error(`无法替换未加载的天体模型「${body.id}」`)
     }
+    if (this.bodyModelUrls.get(body.id) === body.modelUrl) return
+
+    const sequence = (this.bodyReplacementSequences.get(body.id) ?? 0) + 1
+    this.bodyReplacementSequences.set(body.id, sequence)
+
+    const model = await this.modelLoader.load(
+      body.modelUrl,
+      onProgress,
+      body.visualDiameter,
+    )
+
+    if (this.bodyReplacementSequences.get(body.id) !== sequence) {
+      this.modelLoader.dispose(model)
+      return
+    }
 
     anchor.remove(previous)
     this.modelLoader.dispose(previous)
@@ -219,12 +235,6 @@ export class SceneManager {
       this.landmarkLabels = []
       this.removeLunarOrbiters()
     }
-
-    const model = await this.modelLoader.load(
-      body.modelUrl,
-      onProgress,
-      body.visualDiameter,
-    )
     anchor.add(model)
     this.bodyModels.set(body.id, model)
     this.bodyModelUrls.set(body.id, body.modelUrl)
@@ -1200,6 +1210,7 @@ export class SceneManager {
     this.bodyDiameters.clear()
     this.bodyRotationPeriods.clear()
     this.bodyOrbitalPeriods.clear()
+    this.bodyReplacementSequences.clear()
     this.orbitLines = []
     this.currentModel = null
     this.activeBodyId = ''
