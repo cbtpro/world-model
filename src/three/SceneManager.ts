@@ -70,6 +70,8 @@ export class SceneManager {
   private animationId: number | null = null
   private resizeObserver: ResizeObserver
   private landmarkLabels: LandmarkLabel[] = []
+  private lunarSurfaceFeatures: THREE.Group | null = null
+  private lunarOrbiterRoot: THREE.Group | null = null
   private lunarOrbiterModels: LunarOrbiterModel[] = []
   private lunarOrbiterLabels: CSS2DObject[] = []
   private lunarOrbiterOrbitLines: THREE.LineLoop[] = []
@@ -192,6 +194,7 @@ export class SceneManager {
         this.createLandmarkLabels(model, body.visualDiameter)
         this.createLunarSurfaceProbes(model, body.visualDiameter)
         this.createLunarOrbiters(anchor, body.visualDiameter)
+        this.updateLunarFeatureVisibility()
       }
       this.createBodyLabel(model, body.name, body.visualDiameter)
       loadedCount += 1
@@ -244,6 +247,7 @@ export class SceneManager {
       this.createLandmarkLabels(model, body.visualDiameter)
       this.createLunarSurfaceProbes(model, body.visualDiameter)
       this.createLunarOrbiters(anchor, body.visualDiameter)
+      this.updateLunarFeatureVisibility()
     }
     this.createBodyLabel(model, body.name, body.visualDiameter)
     this.setSimulationTime(this.simulationDay)
@@ -292,6 +296,7 @@ export class SceneManager {
     if (!model) throw new Error(`场景中不存在天体「${bodyId}」`)
     this.isSystemView = false
     this.activeBodyId = bodyId
+    this.updateLunarFeatureVisibility()
     this.currentModel = model
     this.currentModel.updateWorldMatrix(true, false)
     const target = model.getWorldPosition(new THREE.Vector3())
@@ -384,6 +389,7 @@ export class SceneManager {
     this.focusedWorldPosition = null
     this.focusedBodyWorldPosition = null
     this.isSystemView = true
+    this.updateLunarFeatureVisibility()
     this.controls.update()
     return distance
   }
@@ -463,6 +469,9 @@ export class SceneManager {
   private createLunarSurfaceProbes(model: THREE.Group, diameter: number): void {
     const radius = diameter / 2
     const rootScale = Math.abs(model.scale.x) || 1
+    const features = new THREE.Group()
+    model.add(features)
+    this.lunarSurfaceFeatures = features
 
     for (const landmark of lunarLandmarks) {
       const latitude = THREE.MathUtils.degToRad(landmark.latitude)
@@ -480,7 +489,7 @@ export class SceneManager {
         new THREE.Vector3(0, 1, 0),
         direction,
       )
-      model.add(marker)
+      features.add(marker)
 
       if (landmark.kind === 'mission' && landmark.id !== 'luna-2') {
         this.addLanderModel(marker, landmark.id)
@@ -820,13 +829,16 @@ export class SceneManager {
 
   private createLunarOrbiters(anchor: THREE.Group, diameter: number): void {
     const moonRadius = diameter / 2
+    const orbiterRoot = new THREE.Group()
+    anchor.add(orbiterRoot)
+    this.lunarOrbiterRoot = orbiterRoot
 
     for (const orbiter of lunarOrbiters) {
       const orbitalPlane = new THREE.Group()
       orbitalPlane.rotation.z = THREE.MathUtils.degToRad(
         orbiter.inclinationDegrees,
       )
-      anchor.add(orbitalPlane)
+      orbiterRoot.add(orbitalPlane)
 
       const orbitRadius = moonRadius * orbiter.orbitalRadius
       const pivot = new THREE.Group()
@@ -1052,6 +1064,8 @@ export class SceneManager {
       if (index >= 0) this.orbitLines.splice(index, 1)
     }
     this.lunarOrbiterOrbitLines = []
+    this.lunarOrbiterRoot?.parent?.remove(this.lunarOrbiterRoot)
+    this.lunarOrbiterRoot = null
   }
 
   private createBodyLabel(
@@ -1132,7 +1146,17 @@ export class SceneManager {
   private updateLunarOrbiterLabels(): void {
     for (const label of this.lunarOrbiterLabels) {
       label.element.style.display =
-        this.activeBodyId === 'moon' ? 'block' : 'none'
+        this.activeBodyId === 'moon' || this.isSystemView ? 'block' : 'none'
+    }
+  }
+
+  private updateLunarFeatureVisibility(): void {
+    const visible = this.activeBodyId === 'moon' || this.isSystemView
+    if (this.lunarSurfaceFeatures) {
+      this.lunarSurfaceFeatures.visible = visible
+    }
+    if (this.lunarOrbiterRoot) {
+      this.lunarOrbiterRoot.visible = visible
     }
   }
 
@@ -1216,6 +1240,7 @@ export class SceneManager {
     this.activeBodyId = ''
     this.isSystemView = false
     this.landmarkLabels = []
+    this.lunarSurfaceFeatures = null
     this.lunarOrbiterModels = []
     this.focusedLandmarkId = null
     this.focusedWorldPosition = null
