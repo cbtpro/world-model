@@ -1,0 +1,42 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --color-bg: #000;
+  --color-panel: rgba(12, 18, 32, 0.85);
+  --color-border: rgba(80, 120, 200, 0.4);
+  --color-text: #e8eef8;
+  --color-text-dim: #8a9bb8;
+  --color-accent: #4a9eff;
+  --color-accent-dim: #2a5a9e;
+  --radius: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+
+/* CSS2DRenderer 坐标轴标签（不受 Vue scoped 样式管理，须全局声明） */
+.axis-label {
+  font-size: 14px;
+  font-weight: bold;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.9), 0 0 3px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  user-select: none;
+}
