@@ -1,7 +1,13 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useUniverseStore } from '@/stores/universe'
 
 const store = useUniverseStore()
+const simulationDate = computed(() => {
+  const timestamp =
+    Date.UTC(2026, 0, 1) + store.simulationDay * 24 * 60 * 60 * 1000
+  return new Date(timestamp).toISOString().replace('T', ' ').slice(0, 16) + ' UTC'
+})
 
 function changeZoom(amount: number) {
   store.cameraDistance = Math.min(
@@ -31,26 +37,75 @@ function changeZoom(amount: number) {
       </div>
     </div>
 
+    <div class="time-header">
+      <div>
+        <label for="simulation-time">模拟时间</label>
+        <output>{{ simulationDate }}</output>
+      </div>
+      <button
+        type="button"
+        class="action-button playback-button"
+        :aria-pressed="store.isTimePlaying"
+        @click="store.isTimePlaying = !store.isTimePlaying"
+      >
+        {{ store.isTimePlaying ? '暂停时间' : '继续时间' }}
+      </button>
+    </div>
+
     <div class="control-row">
-      <label for="rotation-speed">自转速度</label>
       <input
-        id="rotation-speed"
-        v-model.number="store.rotationSpeed"
+        id="simulation-time"
+        v-model.number="store.simulationDay"
         type="range"
         min="0"
-        max="0.005"
-        step="0.0001"
+        max="365.25"
+        step="0.1"
+        aria-label="模拟时间轴"
+        @input="store.isTimePlaying = false"
+      >
+      <div class="timeline-range">
+        <span>2026-01-01</span>
+        <span>2027-01-01</span>
+      </div>
+    </div>
+
+    <div class="control-row">
+      <label for="simulation-speed">时间流速（地球日/秒）</label>
+      <input
+        id="simulation-speed"
+        v-model.number="store.simulationSpeed"
+        type="range"
+        min="0.01"
+        max="10"
+        step="0.01"
       >
     </div>
+
+    <div class="coordinates" aria-live="polite">
+      <span>{{ store.currentBody.name }}实时坐标（示意单位）</span>
+      <code>
+        X {{ store.simulationCoordinates.x.toFixed(2) }}
+        · Y {{ store.simulationCoordinates.y.toFixed(2) }}
+        · Z {{ store.simulationCoordinates.z.toFixed(2) }}
+      </code>
+    </div>
+
+    <label class="toggle-row" for="auxiliary-lines">
+      <span>显示辅助线</span>
+      <input
+        id="auxiliary-lines"
+        v-model="store.auxiliaryLinesVisible"
+        type="checkbox"
+      >
+    </label>
 
     <div class="actions">
       <button
         type="button"
         class="action-button"
-        :aria-pressed="store.rotationPaused"
-        @click="store.rotationPaused = !store.rotationPaused"
+        @click="store.simulationDay = 0"
       >
-        {{ store.rotationPaused ? '继续自转' : '暂停自转' }}
+        回到时间起点
       </button>
       <button type="button" class="action-button reset-button" @click="store.resetView">
         重置视角
@@ -81,9 +136,64 @@ h2 {
   margin-top: 12px;
 }
 
+.time-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.time-header > div {
+  display: grid;
+  gap: 4px;
+}
+
+output,
+.timeline-range,
+.coordinates {
+  color: var(--color-text-dim);
+  font-size: 11px;
+}
+
+.playback-button {
+  flex: 0 0 auto;
+}
+
+.timeline-range {
+  display: flex;
+  justify-content: space-between;
+}
+
+.coordinates {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+.coordinates code {
+  color: var(--color-text);
+  font-size: 10px;
+}
+
 label {
   color: var(--color-text-dim);
   font-size: 12px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  cursor: pointer;
+}
+
+input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
 }
 
 input[type='range'] {

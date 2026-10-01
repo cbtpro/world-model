@@ -11,7 +11,7 @@ export const sun: CelestialBody = {
   distanceFromSunKm: 0,
   visualDiameter: 18,
   visualDistanceFromSun: 0,
-  rotationSpeed: 0.0002,
+  rotationPeriodDays: 25,
   variants: [
     {
       id: 'color',

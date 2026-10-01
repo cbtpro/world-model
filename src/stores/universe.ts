@@ -16,8 +16,11 @@ export const useUniverseStore = defineStore('universe', () => {
   )
   const selectedLandmarkId = ref<string | null>(null)
   const cameraDistance = ref(45.7)
-  const rotationSpeed = ref(bodyRegistry.bodies[DEFAULT_BODY_ID].rotationSpeed ?? 0)
-  const rotationPaused = ref(false)
+  const simulationDay = ref(0)
+  const simulationSpeed = ref(0.25)
+  const isTimePlaying = ref(false)
+  const simulationCoordinates = ref({ x: 0, y: 0, z: 0 })
+  const auxiliaryLinesVisible = ref(true)
   const viewResetKey = ref(0)
   const selectedLandmark = computed(
     () => lunarLandmarks.find(({ id }) => id === selectedLandmarkId.value) ?? null,
@@ -50,13 +53,8 @@ export const useUniverseStore = defineStore('universe', () => {
   function setSelection(bodyId: string, variantId?: string) {
     const body = bodyRegistry.bodies[bodyId]
     if (!body) return
-    const bodyChanged = currentBodyId.value !== bodyId
     currentBodyId.value = bodyId
     currentVariantId.value = variantId ?? body.defaultVariantId
-    if (bodyChanged) {
-      rotationSpeed.value = body.rotationSpeed ?? 0
-      rotationPaused.value = false
-    }
     if (bodyId !== 'moon') selectedLandmarkId.value = null
   }
 
@@ -96,8 +94,10 @@ export const useUniverseStore = defineStore('universe', () => {
 
   function resetView() {
     cameraDistance.value = 45.7
-    rotationSpeed.value = currentBody.value.rotationSpeed ?? 0
-    rotationPaused.value = false
+    simulationDay.value = 0
+    simulationSpeed.value = 0.25
+    isTimePlaying.value = true
+    auxiliaryLinesVisible.value = true
     selectedLandmarkId.value = null
     viewResetKey.value += 1
   }
@@ -108,8 +108,11 @@ export const useUniverseStore = defineStore('universe', () => {
     selectedLandmarkId,
     selectedLandmark,
     cameraDistance,
-    rotationSpeed,
-    rotationPaused,
+    simulationDay,
+    simulationSpeed,
+    isTimePlaying,
+    simulationCoordinates,
+    auxiliaryLinesVisible,
     viewResetKey,
     sceneReady,
     modelLoading,

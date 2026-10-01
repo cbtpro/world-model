@@ -13,8 +13,8 @@ export const moon: CelestialBody = {
   primaryId: 'earth',
   visualDiameter: 1.5,
   visualDistanceFromPrimary: 8,
-  visualOrbitalSpeed: 0.002,
-  rotationSpeed: 0.0008,
+  orbitalPeriodDays: 27.3217,
+  rotationPeriodDays: 27.3217,
   variants: [
     {
       id: 'color',

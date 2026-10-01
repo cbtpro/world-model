@@ -31,8 +31,8 @@ export interface CelestialBody {
   defaultVariantId: string
   /** 模型缩放倍率（可选） */
   scale?: number
-  /** 自转速度（可选，弧度/帧） */
-  rotationSpeed?: number
+  /** 自转周期（地球日） */
+  rotationPeriodDays?: number
   /** 可视化半径（千米，可选，用于相对比例提示） */
   radiusKm?: number
   /** 相对于太阳的平均距离（千米，可选，便于在场景中按比例摆放） */
@@ -47,8 +47,8 @@ export interface CelestialBody {
   visualDistanceFromSun?: number
   /** 教学示意场景中相对主天体的轨道半径 */
   visualDistanceFromPrimary?: number
-  /** 教学示意场景中的轨道自转速度（弧度/帧） */
-  visualOrbitalSpeed?: number
+  /** 公转周期（地球日） */
+  orbitalPeriodDays?: number
 }
 
 // 天体注册表：聚合所有已注册天体
