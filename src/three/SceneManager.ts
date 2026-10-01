@@ -54,7 +54,7 @@ export class SceneManager {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.05
-    this.controls.minDistance = 16
+    this.controls.minDistance = 12
     this.controls.maxDistance = 300
     this.controls.rotateSpeed = 0.5
 
