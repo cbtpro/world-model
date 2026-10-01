@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch: {}
 
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 permissions:
   contents: read
   pages: write
@@ -23,23 +27,23 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install pnpm
-        run: npm install -g pnpm@8
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
 
-      - name: Install dependencies (pnpm)
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm run build
 
       - name: Add SPA 404 fallback
-        run: |
-          if [ -f dist/index.html ]; then
-            cp dist/index.html dist/404.html
-          fi
+        run: cp dist/index.html dist/404.html
 
       - name: Upload artifact for GitHub Pages
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
@@ -51,4 +55,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deploy
-        uses: actions/deploy-pages@v1
+        uses: actions/deploy-pages@v4
