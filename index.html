@@ -7,6 +7,7 @@
   </head>
   <body>
     <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <!-- 使用 %BASE_URL% 使构建时的资源引用带上 base -->
+    <script type="module" src="%BASE_URL%src/main.ts"></script>
   </body>
 </html>
