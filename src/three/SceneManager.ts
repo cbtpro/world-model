@@ -23,6 +23,7 @@ export interface SceneBodyModel {
   primaryId?: string
   rotationPeriodDays: number
   orbitalPeriodDays: number
+  tidallyLockedToPrimary?: boolean
   includeLunarLandmarks?: boolean
 }
 
@@ -61,6 +62,7 @@ export class SceneManager {
   private bodyDiameters = new Map<string, number>()
   private bodyRotationPeriods = new Map<string, number>()
   private bodyOrbitalPeriods = new Map<string, number>()
+  private tidallyLockedBodies = new Set<string>()
   private activeBodyId = ''
   private isSystemView = false
   private auxiliaryLinesVisible = true
@@ -190,6 +192,9 @@ export class SceneManager {
       this.bodyDiameters.set(body.id, body.visualDiameter)
       this.bodyRotationPeriods.set(body.id, body.rotationPeriodDays)
       this.bodyOrbitalPeriods.set(body.id, body.orbitalPeriodDays)
+      if (body.tidallyLockedToPrimary) {
+        this.tidallyLockedBodies.add(body.id)
+      }
       if (body.includeLunarLandmarks) {
         this.createLandmarkLabels(model, body.visualDiameter)
         this.createLunarSurfaceProbes(model, body.visualDiameter)
@@ -243,6 +248,11 @@ export class SceneManager {
     this.bodyModelUrls.set(body.id, body.modelUrl)
     this.bodyDiameters.set(body.id, body.visualDiameter)
     this.bodyRotationPeriods.set(body.id, body.rotationPeriodDays)
+    if (body.tidallyLockedToPrimary) {
+      this.tidallyLockedBodies.add(body.id)
+    } else {
+      this.tidallyLockedBodies.delete(body.id)
+    }
     if (body.includeLunarLandmarks) {
       this.createLandmarkLabels(model, body.visualDiameter)
       this.createLunarSurfaceProbes(model, body.visualDiameter)
@@ -271,6 +281,10 @@ export class SceneManager {
   setSimulationTime(days: number): void {
     this.simulationDay = days
     for (const [bodyId, model] of this.bodyModels) {
+      if (this.tidallyLockedBodies.has(bodyId)) {
+        model.rotation.y = -Math.PI / 2
+        continue
+      }
       const period = this.bodyRotationPeriods.get(bodyId)
       model.rotation.y = period ? (days / period) * Math.PI * 2 : 0
     }
@@ -1234,6 +1248,7 @@ export class SceneManager {
     this.bodyDiameters.clear()
     this.bodyRotationPeriods.clear()
     this.bodyOrbitalPeriods.clear()
+    this.tidallyLockedBodies.clear()
     this.bodyReplacementSequences.clear()
     this.orbitLines = []
     this.currentModel = null

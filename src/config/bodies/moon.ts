@@ -15,6 +15,7 @@ export const moon: CelestialBody = {
   visualDistanceFromPrimary: 8,
   orbitalPeriodDays: 27.3217,
   rotationPeriodDays: 27.3217,
+  tidallyLockedToPrimary: true,
   variants: [
     {
       id: 'color',
