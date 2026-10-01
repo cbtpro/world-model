@@ -95,3 +95,13 @@ button {
   background: #fff;
   box-shadow: 0 0 12px #4a9eff, 0 0 22px #4a9eff;
 }
+
+.lunar-orbiter-label {
+  color: #d8eaff;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px #000, 0 0 7px #000;
+  pointer-events: none;
+  user-select: none;
+}
