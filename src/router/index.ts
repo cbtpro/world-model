@@ -20,7 +20,8 @@ const routes: RouteRecordRaw[] = [
 ]
 
 export const router = createRouter({
-  history: createWebHistory(),
+  // base 由 vite.config.ts 的 base 字段驱动，确保 GitHub Pages 子路径下路由正确
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
 
