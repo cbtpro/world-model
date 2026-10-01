@@ -6,6 +6,7 @@ import { useUniverseStore } from '@/stores/universe'
 const store = useUniverseStore()
 const craters = computed(() => lunarLandmarks.filter(({ kind }) => kind === 'crater'))
 const missions = computed(() => lunarLandmarks.filter(({ kind }) => kind === 'mission'))
+const moments = computed(() => lunarLandmarks.filter(({ kind }) => kind === 'moment'))
 
 function selectLandmark(id: string) {
   store.selectLandmark(id)
@@ -34,6 +35,24 @@ function selectLandmark(id: string) {
           @click="selectLandmark(landmark.id)"
         >
           <span class="marker crater" />
+          <span class="landmark-copy">
+            <span class="landmark-name">{{ landmark.name }}</span>
+            <span class="landmark-coordinates">{{ landmark.coordinates }}</span>
+          </span>
+        </button>
+      </section>
+
+      <section class="landmark-group">
+        <h3>历史瞬间</h3>
+        <button
+          v-for="landmark in moments"
+          :key="landmark.id"
+          type="button"
+          :class="['landmark', { active: store.selectedLandmarkId === landmark.id }]"
+          :aria-pressed="store.selectedLandmarkId === landmark.id"
+          @click="selectLandmark(landmark.id)"
+        >
+          <span class="marker moment" />
           <span class="landmark-copy">
             <span class="landmark-name">{{ landmark.name }}</span>
             <span class="landmark-coordinates">{{ landmark.coordinates }}</span>
@@ -154,6 +173,11 @@ h2 {
 
 .marker.mission {
   color: #56c8ff;
+  background: currentColor;
+}
+
+.marker.moment {
+  color: #ff9b75;
   background: currentColor;
 }
 
