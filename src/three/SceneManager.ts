@@ -99,6 +99,8 @@ export class SceneManager {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setClearColor(0x000000, 1)
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    this.renderer.toneMappingExposure = 1.3
 
     // CSS2D 渲染器（坐标轴文字标签层，不拦截鼠标事件）
     this.cssRenderer = new CSS2DRenderer()
@@ -122,8 +124,9 @@ export class SceneManager {
     this.controls.rotateSpeed = 0.5
 
     // 环境光只保留微弱填充光；太阳方向光负责实时昼夜明暗。
-    this.scene.add(new THREE.AmbientLight(0x404060, 0.12))
-    this.sunLight = new THREE.DirectionalLight(0xffffff, 3)
+    // 提高环境光与太阳光强度，避免贴图在默认曝光下显得过暗、细节难以辨认。
+    this.scene.add(new THREE.AmbientLight(0x404060, 0.3))
+    this.sunLight = new THREE.DirectionalLight(0xffffff, 4.5)
     this.sunLight.position.set(0, 0, 0)
     this.scene.add(this.sunLight, this.sunLight.target)
 
