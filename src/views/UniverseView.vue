@@ -11,8 +11,36 @@ import SceneControls from '@/components/SceneControls.vue'
 // 主页面：组装画布 + 控制面板 + 加载遮罩
 const store = useUniverseStore()
 
+// 轻触退出禅模式所用的阈值：区分「点击」与「拖拽旋转视角」的手势
+const TAP_MOVEMENT_THRESHOLD = 10
+const TAP_DURATION_THRESHOLD = 500
+
+let tapStartX = 0
+let tapStartY = 0
+let tapStartTime = 0
+
 function exitZenMode(): void {
   if (store.isZenMode) store.isZenMode = false
+}
+
+function handleZenPointerDown(event: PointerEvent): void {
+  if (!store.isZenMode) return
+  tapStartX = event.clientX
+  tapStartY = event.clientY
+  tapStartTime = Date.now()
+}
+
+function handleZenPointerUp(event: PointerEvent): void {
+  if (!store.isZenMode) return
+  const movement = Math.hypot(
+    event.clientX - tapStartX,
+    event.clientY - tapStartY,
+  )
+  const duration = Date.now() - tapStartTime
+  // 仅在短促、几乎无移动的点击/轻触时退出，避免拖拽旋转视角被误判
+  if (movement < TAP_MOVEMENT_THRESHOLD && duration < TAP_DURATION_THRESHOLD) {
+    exitZenMode()
+  }
 }
 
 onMounted(() => window.addEventListener('keydown', exitZenMode))
@@ -20,7 +48,11 @@ onUnmounted(() => window.removeEventListener('keydown', exitZenMode))
 </script>
 
 <template>
-  <div class="universe-view">
+  <div
+    class="universe-view"
+    @pointerdown="handleZenPointerDown"
+    @pointerup="handleZenPointerUp"
+  >
     <!-- Three.js 渲染层 -->
     <UniverseCanvas />
 
