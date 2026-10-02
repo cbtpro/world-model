@@ -16,11 +16,16 @@ export const useUniverseStore = defineStore('universe', () => {
   )
   const selectedLandmarkId = ref<string | null>(null)
   const cameraDistance = ref(45.7)
-  const simulationDay = ref(0)
-  const simulationSpeed = ref(0.25)
+  const simulationStartDay = Date.now() / 86_400_000
+  const simulationDay = ref(simulationStartDay)
+  const simulationSpeed = ref(1)
   const isTimePlaying = ref(false)
   const simulationCoordinates = ref({ x: 0, y: 0, z: 0 })
-  const auxiliaryLinesVisible = ref(true)
+  const auxiliaryLinesVisible = ref(false)
+  const isZenMode = ref(false)
+  const surfaceLocation = ref<{ latitude: number; longitude: number } | null>(
+    null,
+  )
   const viewResetKey = ref(0)
   const selectedLandmark = computed(
     () => lunarLandmarks.find(({ id }) => id === selectedLandmarkId.value) ?? null,
@@ -94,10 +99,10 @@ export const useUniverseStore = defineStore('universe', () => {
 
   function resetView() {
     cameraDistance.value = 45.7
-    simulationDay.value = 0
-    simulationSpeed.value = 0.25
+    simulationDay.value = simulationStartDay
+    simulationSpeed.value = 1
     isTimePlaying.value = true
-    auxiliaryLinesVisible.value = true
+    auxiliaryLinesVisible.value = false
     selectedLandmarkId.value = null
     viewResetKey.value += 1
   }
@@ -108,11 +113,14 @@ export const useUniverseStore = defineStore('universe', () => {
     selectedLandmarkId,
     selectedLandmark,
     cameraDistance,
+    simulationStartDay,
     simulationDay,
     simulationSpeed,
     isTimePlaying,
     simulationCoordinates,
     auxiliaryLinesVisible,
+    isZenMode,
+    surfaceLocation,
     viewResetKey,
     sceneReady,
     modelLoading,

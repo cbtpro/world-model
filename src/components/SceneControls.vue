@@ -1,19 +1,62 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUniverseStore } from '@/stores/universe'
 
 const store = useUniverseStore()
+const router = useRouter()
 const isCollapsed = ref(false)
+const isLocating = ref(false)
+const locationMessage = ref('')
+const dayToDate = (day: number) =>
+  new Date(day * 86_400_000).toISOString().replace('T', ' ').slice(0, 16)
 const simulationDate = computed(() => {
-  const timestamp =
-    Date.UTC(2026, 0, 1) + store.simulationDay * 24 * 60 * 60 * 1000
-  return new Date(timestamp).toISOString().replace('T', ' ').slice(0, 16) + ' UTC'
+  return `${dayToDate(store.simulationDay)} UTC`
 })
+const startDate = computed(() => dayToDate(store.simulationStartDay).slice(0, 10))
+const endDate = computed(() =>
+  dayToDate(store.simulationStartDay + 365.25).slice(0, 10),
+)
 
 function changeZoom(amount: number) {
   store.cameraDistance = Math.min(
     300,
     Math.max(1, store.cameraDistance + amount),
+  )
+}
+
+function locateCurrentPosition(): void {
+  locationMessage.value = ''
+  if (!window.isSecureContext) {
+    locationMessage.value = '浏览器定位需要 HTTPS 或 localhost 页面'
+    return
+  }
+  if (!navigator.geolocation) {
+    locationMessage.value = '此浏览器不支持获取当前位置'
+    return
+  }
+
+  isLocating.value = true
+  navigator.geolocation.getCurrentPosition(
+    ({ coords }) => {
+      store.surfaceLocation = {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      }
+      locationMessage.value = `已定位：${coords.latitude.toFixed(4)}°, ${coords.longitude.toFixed(4)}°`
+      isLocating.value = false
+      void router.push({ name: 'body', params: { bodyId: 'earth' } })
+    },
+    (error) => {
+      locationMessage.value =
+        error.code === error.PERMISSION_DENIED
+          ? '定位权限被拒绝，请在浏览器设置中允许访问位置'
+          : error.code === error.TIMEOUT
+            ? '获取位置超时，请重试'
+            : '无法获取当前位置，请检查设备定位设置'
+      isLocating.value = false
+    },
+    { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
   )
 }
 </script>
@@ -62,42 +105,52 @@ function changeZoom(amount: number) {
         <label for="simulation-time">模拟时间</label>
         <output>{{ simulationDate }}</output>
       </div>
+    </div>
+
+    <div class="timeline-player">
       <button
         type="button"
-        class="action-button playback-button"
+        class="playback-button"
+        :aria-label="store.isTimePlaying ? '暂停时间' : '播放时间'"
+        :title="store.isTimePlaying ? '暂停时间' : '播放时间'"
         :aria-pressed="store.isTimePlaying"
         @click="store.isTimePlaying = !store.isTimePlaying"
       >
-        {{ store.isTimePlaying ? '暂停时间' : '继续时间' }}
+        <svg v-if="store.isTimePlaying" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 5h4v14H7zm6 0h4v14h-4z" />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 4.5v15l12-7.5z" />
+        </svg>
       </button>
-    </div>
-
-    <div class="control-row">
       <input
         id="simulation-time"
         v-model.number="store.simulationDay"
         type="range"
-        min="0"
-        max="365.25"
-        step="0.1"
+        :min="store.simulationStartDay"
+        :max="store.simulationStartDay + 365.25"
+        step="0.00001"
         aria-label="模拟时间轴"
         @input="store.isTimePlaying = false"
       >
-      <div class="timeline-range">
-        <span>2026-01-01</span>
-        <span>2027-01-01</span>
-      </div>
+    </div>
+    <div class="timeline-range">
+      <span>{{ startDate }}</span>
+      <span>{{ endDate }}</span>
     </div>
 
     <div class="control-row">
-      <label for="simulation-speed">时间流速（地球日/秒）</label>
+      <div class="speed-label">
+        <label for="simulation-speed">时间流速</label>
+        <output>{{ store.simulationSpeed }}× 现实时间</output>
+      </div>
       <input
         id="simulation-speed"
         v-model.number="store.simulationSpeed"
         type="range"
-        min="0.01"
-        max="10"
-        step="0.01"
+        min="0.1"
+        max="1000"
+        step="0.1"
       >
     </div>
 
@@ -123,13 +176,26 @@ function changeZoom(amount: number) {
       <button
         type="button"
         class="action-button"
-        @click="store.simulationDay = 0"
+        @click="store.simulationDay = store.simulationStartDay"
       >
-        回到时间起点
+        回到当前时间
       </button>
       <button type="button" class="action-button reset-button" @click="store.resetView">
         重置视角
       </button>
+    </div>
+    <div class="location-control">
+      <button
+        type="button"
+        class="action-button location-button"
+        :disabled="isLocating"
+        @click="locateCurrentPosition"
+      >
+        {{ isLocating ? '正在获取位置…' : '定位当前位置并显示在地球' }}
+      </button>
+      <p v-if="locationMessage" class="location-message" aria-live="polite">
+        {{ locationMessage }}
+      </p>
     </div>
     </div>
   </section>
@@ -138,6 +204,8 @@ function changeZoom(amount: number) {
 <style scoped>
 .scene-controls {
   width: 260px;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
   padding: 0 16px 14px;
   color: var(--color-text);
   background: var(--color-panel);
@@ -206,6 +274,39 @@ h2 {
   gap: 4px;
 }
 
+.timeline-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.timeline-player input {
+  flex: 1;
+  min-width: 0;
+}
+
+.playback-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  color: #fff;
+  background: var(--color-accent-dim);
+  border: 1px solid var(--color-border);
+}
+
+.playback-button:hover {
+  background: var(--color-accent);
+}
+
+.playback-button svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
 output,
 .timeline-range,
 .coordinates {
@@ -213,13 +314,17 @@ output,
   font-size: 11px;
 }
 
-.playback-button {
-  flex: 0 0 auto;
-}
-
 .timeline-range {
   display: flex;
   justify-content: space-between;
+  margin-top: 4px;
+}
+
+.speed-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .coordinates {
@@ -282,6 +387,26 @@ input[type='range'] {
   display: flex;
   gap: 8px;
   margin-top: 14px;
+}
+
+.location-control {
+  margin-top: 10px;
+}
+
+.location-button {
+  width: 100%;
+}
+
+.location-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.location-message {
+  margin-top: 6px;
+  color: var(--color-text-dim);
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .action-button {

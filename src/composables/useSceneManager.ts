@@ -4,7 +4,7 @@ import { useUniverseStore } from '@/stores/universe'
 import { SceneManager, type SceneBodyModel } from '@/three/SceneManager'
 import { bodyRegistry } from '@/config/bodies'
 
-const SIMULATION_YEAR_DAYS = 365.25
+const SECONDS_PER_DAY = 86_400
 
 export function useSceneManager() {
   const containerRef = ref<HTMLElement | null>(null)
@@ -29,11 +29,9 @@ export function useSceneManager() {
 
   function animateTime(timestamp: number): void {
     if (previousFrameTime !== null && store.isTimePlaying && !loadingPromise) {
-      const elapsedSeconds = Math.min((timestamp - previousFrameTime) / 1000, 0.25)
-      store.simulationDay =
-        (store.simulationDay +
-          elapsedSeconds * store.simulationSpeed) %
-        SIMULATION_YEAR_DAYS
+      const elapsedSeconds = (timestamp - previousFrameTime) / 1000
+      store.simulationDay +=
+        (elapsedSeconds * store.simulationSpeed) / SECONDS_PER_DAY
     }
     previousFrameTime = timestamp
     animationFrameId = requestAnimationFrame(animateTime)
@@ -70,6 +68,8 @@ export function useSceneManager() {
     store.setScenePhase()
     sceneManager = new SceneManager(containerRef.value)
     sceneManager.init()
+    sceneManager.setAuxiliaryLinesVisible(store.auxiliaryLinesVisible)
+    sceneManager.setZenMode(store.isZenMode)
     store.setSceneReady(true)
     store.startModelLoading('加载太阳、地球与月球')
 
@@ -90,6 +90,7 @@ export function useSceneManager() {
         sceneManager.setActiveBody(store.currentBodyId)
         store.cameraDistance = sceneManager.resetView()
         sceneManager.setSimulationTime(store.simulationDay)
+        sceneManager.setSurfaceLocation(store.surfaceLocation)
         sceneManager.setFocusedLandmark(store.selectedLandmarkId)
         updateSelectedCoordinates()
         store.isTimePlaying = true
@@ -138,6 +139,16 @@ export function useSceneManager() {
   watch(
     () => store.auxiliaryLinesVisible,
     (visible) => sceneManager?.setAuxiliaryLinesVisible(visible),
+  )
+
+  watch(
+    () => store.isZenMode,
+    (enabled) => sceneManager?.setZenMode(enabled),
+  )
+
+  watch(
+    () => store.surfaceLocation,
+    (location) => sceneManager?.setSurfaceLocation(location),
   )
 
   watch(

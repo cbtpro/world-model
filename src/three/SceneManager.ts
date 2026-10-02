@@ -13,6 +13,11 @@ import { lunarOrbiters } from '@/config/lunarOrbiters'
 
 const LANDMARK_SURFACE_OFFSET = 0.08
 
+interface SurfaceLocation {
+  latitude: number
+  longitude: number
+}
+
 export interface SceneBodyModel {
   id: string
   name: string
@@ -65,7 +70,7 @@ export class SceneManager {
   private tidallyLockedBodies = new Set<string>()
   private activeBodyId = ''
   private isSystemView = false
-  private auxiliaryLinesVisible = true
+  private auxiliaryLinesVisible = false
   private simulationDay = 0
   private orbitLines: THREE.LineLoop[] = []
   private focusedBodyWorldPosition: THREE.Vector3 | null = null
@@ -79,6 +84,9 @@ export class SceneManager {
   private lunarOrbiterOrbitLines: THREE.LineLoop[] = []
   private focusedLandmarkId: string | null = null
   private focusedWorldPosition: THREE.Vector3 | null = null
+  private surfaceLocation: SurfaceLocation | null = null
+  private locationMarker: THREE.Group | null = null
+  private locationPulseMaterial: THREE.ShaderMaterial | null = null
 
   constructor(container: HTMLElement) {
     this.container = container
@@ -207,8 +215,9 @@ export class SceneManager {
     }
 
     this.createOrbitLines(bodies)
-    this.setSimulationTime(0)
+    this.setSimulationTime(this.simulationDay)
     this.updateSunlightDirection()
+    this.setSurfaceLocation(this.surfaceLocation)
     onProgress?.(100)
   }
 
@@ -237,6 +246,7 @@ export class SceneManager {
       return
     }
 
+    if (body.id === 'earth') this.clearSurfaceLocationMarker()
     anchor.remove(previous)
     this.modelLoader.dispose(previous)
     if (body.id === 'moon') {
@@ -261,6 +271,7 @@ export class SceneManager {
     }
     this.createBodyLabel(model, body.name, body.visualDiameter)
     this.setSimulationTime(this.simulationDay)
+    if (body.id === 'earth') this.setSurfaceLocation(this.surfaceLocation)
     if (this.activeBodyId === body.id) {
       this.currentModel = model
       model.updateMatrixWorld(true)
@@ -286,11 +297,11 @@ export class SceneManager {
         continue
       }
       const period = this.bodyRotationPeriods.get(bodyId)
-      model.rotation.y = period ? (days / period) * Math.PI * 2 : 0
+      model.rotation.y = period ? ((days % period) / period) * Math.PI * 2 : 0
     }
     for (const [bodyId, anchor] of this.bodyOrbitPivots) {
       const period = this.bodyOrbitalPeriods.get(bodyId)
-      anchor.rotation.y = period ? (days / period) * Math.PI * 2 : 0
+      anchor.rotation.y = period ? ((days % period) / period) * Math.PI * 2 : 0
     }
     for (const {
       pivot,
@@ -298,7 +309,9 @@ export class SceneManager {
       orbitalPeriodDays,
       phaseRadians,
     } of this.lunarOrbiterModels) {
-      const angle = (days / orbitalPeriodDays) * Math.PI * 2 + phaseRadians
+      const angle =
+        ((days % orbitalPeriodDays) / orbitalPeriodDays) * Math.PI * 2 +
+        phaseRadians
       pivot.rotation.y = angle
       spacecraft.rotation.y = -angle
     }
@@ -350,6 +363,82 @@ export class SceneManager {
     for (const line of this.orbitLines) {
       line.visible = visible
     }
+  }
+
+  setZenMode(enabled: boolean): void {
+    this.cssRenderer.domElement.style.visibility = enabled ? 'hidden' : 'visible'
+  }
+
+  setSurfaceLocation(location: SurfaceLocation | null): void {
+    this.surfaceLocation = location
+    this.clearSurfaceLocationMarker()
+    if (!location) return
+
+    const earth = this.bodyModels.get('earth')
+    if (!earth) return
+
+    const latitude = THREE.MathUtils.degToRad(location.latitude)
+    const longitude = THREE.MathUtils.degToRad(location.longitude)
+    const direction = new THREE.Vector3(
+      Math.cos(latitude) * Math.sin(longitude),
+      Math.sin(latitude),
+      Math.cos(latitude) * Math.cos(longitude),
+    ).normalize()
+    const radius = (this.bodyDiameters.get('earth') ?? 4) / 2
+    const marker = new THREE.Group()
+    marker.position.copy(direction).multiplyScalar(radius + 0.035)
+    marker.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction)
+
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.09, 0.012, 12, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0x9fffe5,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+      }),
+    )
+    marker.add(ring)
+
+    const pulseMaterial = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec2 vUv;
+        void main() {
+          float radius = mod(uTime * 0.22, 0.9);
+          float distanceFromCenter = length((vUv - 0.5) * 2.0);
+          float edge = abs(distanceFromCenter - radius);
+          float alpha = (1.0 - smoothstep(0.012, 0.07, edge))
+            * (1.0 - smoothstep(0.55, 0.9, radius))
+            * 0.85;
+          vec3 color = mix(
+            vec3(0.16, 0.95, 0.78),
+            vec3(0.7, 0.95, 1.0),
+            smoothstep(0.0, 0.9, radius)
+          );
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    })
+    const pulse = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), pulseMaterial)
+    pulse.rotation.x = -Math.PI / 2
+    marker.add(pulse)
+    marker.visible = this.activeBodyId === 'earth'
+    earth.add(marker)
+    this.locationMarker = marker
+    this.locationPulseMaterial = pulseMaterial
   }
 
   setCameraDistance(distance: number): void {
@@ -422,6 +511,9 @@ export class SceneManager {
   private startRenderLoop(): void {
     const animate = () => {
       this.animationId = requestAnimationFrame(animate)
+      if (this.locationPulseMaterial) {
+        this.locationPulseMaterial.uniforms.uTime.value = performance.now() / 1000
+      }
       this.updateSunlightDirection()
       this.updateLandmarkLabels()
       this.updateLunarOrbiterLabels()
@@ -1172,6 +1264,24 @@ export class SceneManager {
     if (this.lunarOrbiterRoot) {
       this.lunarOrbiterRoot.visible = visible
     }
+    if (this.locationMarker) {
+      this.locationMarker.visible = this.activeBodyId === 'earth'
+    }
+  }
+
+  private clearSurfaceLocationMarker(): void {
+    if (!this.locationMarker) return
+    this.locationMarker.parent?.remove(this.locationMarker)
+    this.locationMarker.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return
+      object.geometry.dispose()
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material]
+      materials.forEach((material) => material.dispose())
+    })
+    this.locationMarker = null
+    this.locationPulseMaterial = null
   }
 
   private focusLandmark(landmarkId: string): void {
@@ -1226,6 +1336,7 @@ export class SceneManager {
   }
 
   private clearSystem(): void {
+    this.clearSurfaceLocationMarker()
     this.removeLunarOrbiters()
     for (const model of this.bodyModels.values()) {
       model.parent?.remove(model)
