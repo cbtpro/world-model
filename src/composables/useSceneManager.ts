@@ -87,9 +87,8 @@ export function useSceneManager() {
       })
       .then(() => {
         if (!sceneManager) return
-        sceneManager.setActiveBody(store.currentBodyId)
-        store.cameraDistance = sceneManager.resetView()
         sceneManager.setSimulationTime(store.simulationDay)
+        store.cameraDistance = sceneManager.setActiveBody(store.currentBodyId)
         sceneManager.setSurfaceLocation(store.surfaceLocation)
         sceneManager.setFocusedLandmark(store.selectedLandmarkId)
         updateSelectedCoordinates()
