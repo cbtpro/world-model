@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
 import { useUniverseStore } from '@/stores/universe'
 import UniverseCanvas from '@/components/UniverseCanvas.vue'
 import LoadingOverlay from '@/components/LoadingOverlay.vue'
@@ -9,6 +10,13 @@ import SceneControls from '@/components/SceneControls.vue'
 
 // 主页面：组装画布 + 控制面板 + 加载遮罩
 const store = useUniverseStore()
+
+function exitZenMode(): void {
+  if (store.isZenMode) store.isZenMode = false
+}
+
+onMounted(() => window.addEventListener('keydown', exitZenMode))
+onUnmounted(() => window.removeEventListener('keydown', exitZenMode))
 </script>
 
 <template>
@@ -17,9 +25,17 @@ const store = useUniverseStore()
     <UniverseCanvas />
 
     <!-- UI 控制层 -->
-    <div class="ui-layer">
+    <div v-if="!store.isZenMode" class="ui-layer">
       <header class="top-bar">
         <BodySelector />
+        <button
+          type="button"
+          class="zen-button"
+          aria-label="开启禅模式"
+          @click="store.isZenMode = true"
+        >
+          禅
+        </button>
       </header>
 
       <aside v-if="store.currentBodyId === 'moon'" class="landmark-navigation">
@@ -47,7 +63,7 @@ const store = useUniverseStore()
     </div>
 
     <!-- 加载遮罩 -->
-    <LoadingOverlay />
+    <LoadingOverlay v-if="!store.isZenMode" />
   </div>
 </template>
 
@@ -70,7 +86,23 @@ const store = useUniverseStore()
   position: absolute;
   top: 24px;
   left: 24px;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
   pointer-events: auto;
+}
+
+.zen-button {
+  min-height: 32px;
+  padding: 6px 12px;
+  color: var(--color-text);
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  font-size: 13px;
+}
+
+.zen-button:hover {
+  background: var(--color-accent-dim);
 }
 
 .info-panel {

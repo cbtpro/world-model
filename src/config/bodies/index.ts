@@ -22,6 +22,6 @@ export const bodyRegistry: BodyRegistry = {
 
 // 默认天体 id（用于路由守卫回退）；新增天体不应改变既有默认页
 export const DEFAULT_BODY_ID =
-  bodyDefinitions.find(({ id }) => id === 'moon')?.id ??
+  bodyDefinitions.find(({ id }) => id === 'earth')?.id ??
   bodyDefinitions[0]?.id ??
-  'moon'
+  'earth'
