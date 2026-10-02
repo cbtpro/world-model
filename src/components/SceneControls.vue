@@ -13,7 +13,9 @@ const dayToDate = (day: number) =>
 const simulationDate = computed(() => {
   return `${dayToDate(store.simulationDay)} UTC`
 })
-const startDate = computed(() => dayToDate(store.simulationStartDay).slice(0, 10))
+const startDate = computed(() =>
+  dayToDate(store.simulationStartDay - 365.25).slice(0, 10),
+)
 const endDate = computed(() =>
   dayToDate(store.simulationStartDay + 365.25).slice(0, 10),
 )
@@ -127,7 +129,7 @@ function locateCurrentPosition(): void {
         id="simulation-time"
         v-model.number="store.simulationDay"
         type="range"
-        :min="store.simulationStartDay"
+        :min="store.simulationStartDay - 365.25"
         :max="store.simulationStartDay + 365.25"
         step="0.00001"
         aria-label="模拟时间轴"
