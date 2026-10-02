@@ -291,18 +291,31 @@ export class SceneManager {
 
   setSimulationTime(days: number): void {
     this.simulationDay = days
+
+    // 轨道位置须先于自转计算：地球自转对齐真实 UTC 时间依赖其当前世界坐标。
+    for (const [bodyId, anchor] of this.bodyOrbitPivots) {
+      const period = this.bodyOrbitalPeriods.get(bodyId)
+      anchor.rotation.y = period ? ((days % period) / period) * Math.PI * 2 : 0
+    }
+
+    const sunModel = this.bodyModels.get('sun')
+    const earthAnchor = this.bodyAnchors.get('earth')
+    sunModel?.updateWorldMatrix(true, false)
+    earthAnchor?.updateWorldMatrix(true, false)
+
     for (const [bodyId, model] of this.bodyModels) {
       if (this.tidallyLockedBodies.has(bodyId)) {
         model.rotation.y = -Math.PI / 2
         continue
       }
+      if (bodyId === 'earth' && sunModel && earthAnchor) {
+        model.rotation.y = this.computeEarthSpin(days, sunModel, earthAnchor)
+        continue
+      }
       const period = this.bodyRotationPeriods.get(bodyId)
       model.rotation.y = period ? ((days % period) / period) * Math.PI * 2 : 0
     }
-    for (const [bodyId, anchor] of this.bodyOrbitPivots) {
-      const period = this.bodyOrbitalPeriods.get(bodyId)
-      anchor.rotation.y = period ? ((days % period) / period) * Math.PI * 2 : 0
-    }
+
     for (const {
       pivot,
       spacecraft,
@@ -316,6 +329,39 @@ export class SceneManager {
       spacecraft.rotation.y = -angle
     }
     this.updateSunlightDirection()
+  }
+
+  // 计算地球自转角：使真实 UTC 时间对应的太阳下点经度与场景中太阳方向一致，
+  // 这样深圳（东八区）等真实经纬度在当地白天时会正确显示为受光面。
+  private computeEarthSpin(
+    days: number,
+    sunModel: THREE.Group,
+    earthAnchor: THREE.Group,
+  ): number {
+    const sunWorldPosition = sunModel.getWorldPosition(new THREE.Vector3())
+    const earthWorldPosition = earthAnchor.getWorldPosition(new THREE.Vector3())
+    const worldSunDirection = sunWorldPosition.sub(earthWorldPosition)
+    if (worldSunDirection.lengthSq() === 0) return 0
+    worldSunDirection.normalize()
+
+    // 将太阳方向转换到地球锚点（自转前）的局部坐标系，得到当前轨道位置下
+    // 太阳相对于「未自转」地球模型的方位角。
+    const anchorRotationInverse = new THREE.Matrix4()
+      .copy(earthAnchor.matrixWorld)
+      .invert()
+    const localSunDirection = worldSunDirection.transformDirection(
+      anchorRotationInverse,
+    )
+    const preSpinBearing = Math.atan2(localSunDirection.x, localSunDirection.z)
+
+    // 真实 UTC 时间对应的太阳下点经度：UTC 12:00 时本初子午线朝向太阳。
+    const fractionalDay = days - Math.floor(days)
+    const utcHours = fractionalDay * 24
+    const subsolarLongitudeRad = THREE.MathUtils.degToRad(
+      (12 - utcHours) * 15,
+    )
+
+    return preSpinBearing - subsolarLongitudeRad
   }
 
   setActiveBody(bodyId: string): number {
