@@ -1,11 +1,7 @@
 // 天体模型变体接口
 export interface CelestialVariant {
-  /** 变体唯一标识，如 'color' | 'grid' | 'topo' */
+  /** 变体唯一标识，如 'color' | 'grid' | 'topo'；显示名称/描述通过 i18n 按此 id 查找 */
   id: string
-  /** 变体显示名称 */
-  name: string
-  /** 变体描述说明 */
-  description: string
   /** GLB 模型文件路径（相对于 public 目录） */
   modelUrl: string
   /** 文件大小（MB），用于 UI 提示加载耗时 */
@@ -17,12 +13,8 @@ export type CelestialCategory = 'planet' | 'moon' | 'star' | 'comet'
 
 // 天体接口
 export interface CelestialBody {
-  /** 天体唯一标识，如 'moon' */
+  /** 天体唯一标识，如 'moon'；显示名称/描述通过 i18n 按此 id 查找 */
   id: string
-  /** 天体显示名称 */
-  name: string
-  /** 天体描述说明 */
-  description: string
   /** 天体分类 */
   category: CelestialCategory
   /** 该天体可选的模型变体列表 */

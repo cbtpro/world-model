@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUniverseStore } from '@/stores/universe'
 
 const store = useUniverseStore()
 const router = useRouter()
+const { t } = useI18n()
 const isCollapsed = ref(false)
 const isLocating = ref(false)
 const locationMessage = ref('')
@@ -30,11 +32,11 @@ function changeZoom(amount: number) {
 function locateCurrentPosition(): void {
   locationMessage.value = ''
   if (!window.isSecureContext) {
-    locationMessage.value = '浏览器定位需要 HTTPS 或 localhost 页面'
+    locationMessage.value = t('controls.locateNeedsHttps')
     return
   }
   if (!navigator.geolocation) {
-    locationMessage.value = '此浏览器不支持获取当前位置'
+    locationMessage.value = t('controls.locateUnsupported')
     return
   }
 
@@ -45,17 +47,20 @@ function locateCurrentPosition(): void {
         latitude: coords.latitude,
         longitude: coords.longitude,
       }
-      locationMessage.value = `已定位：${coords.latitude.toFixed(4)}°, ${coords.longitude.toFixed(4)}°`
+      locationMessage.value = t('controls.locateSuccess', {
+        lat: coords.latitude.toFixed(4),
+        lng: coords.longitude.toFixed(4),
+      })
       isLocating.value = false
       void router.push({ name: 'body', params: { bodyId: 'earth' } })
     },
     (error) => {
       locationMessage.value =
         error.code === error.PERMISSION_DENIED
-          ? '定位权限被拒绝，请在浏览器设置中允许访问位置'
+          ? t('controls.locateDenied')
           : error.code === error.TIMEOUT
-            ? '获取位置超时，请重试'
-            : '无法获取当前位置，请检查设备定位设置'
+            ? t('controls.locateTimeout')
+            : t('controls.locateFailed')
       isLocating.value = false
     },
     { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
@@ -67,18 +72,18 @@ function locateCurrentPosition(): void {
   <section
     class="scene-controls"
     :class="{ collapsed: isCollapsed }"
-    aria-label="场景控制面板"
+    :aria-label="t('controls.panelLabel')"
   >
     <header class="controls-header">
-      <h2>场景控制</h2>
+      <h2>{{ t('controls.title') }}</h2>
       <button
         type="button"
         class="collapse-button"
         :aria-expanded="!isCollapsed"
-        :aria-label="isCollapsed ? '展开场景控制' : '折叠场景控制'"
+        :aria-label="isCollapsed ? t('controls.expandAria') : t('controls.collapseAria')"
         @click="isCollapsed = !isCollapsed"
       >
-        <span aria-hidden="true">{{ isCollapsed ? '展开' : '折叠' }}</span>
+        <span aria-hidden="true">{{ isCollapsed ? t('controls.expand') : t('controls.collapse') }}</span>
         <span class="collapse-icon" aria-hidden="true">
           {{ isCollapsed ? '⌃' : '⌄' }}
         </span>
@@ -87,9 +92,9 @@ function locateCurrentPosition(): void {
 
     <div v-show="!isCollapsed" class="controls-content">
     <div class="control-row">
-      <label for="camera-distance">视距</label>
+      <label for="camera-distance">{{ t('controls.distance') }}</label>
       <div class="range-control">
-        <button type="button" aria-label="拉近视角" @click="changeZoom(-10)">−</button>
+        <button type="button" :aria-label="t('controls.zoomInAria')" @click="changeZoom(-10)">−</button>
         <input
           id="camera-distance"
           v-model.number="store.cameraDistance"
@@ -98,13 +103,13 @@ function locateCurrentPosition(): void {
           max="300"
           step="1"
         >
-        <button type="button" aria-label="拉远视角" @click="changeZoom(10)">+</button>
+        <button type="button" :aria-label="t('controls.zoomOutAria')" @click="changeZoom(10)">+</button>
       </div>
     </div>
 
     <div class="time-header">
       <div>
-        <label for="simulation-time">模拟时间</label>
+        <label for="simulation-time">{{ t('controls.simulationTime') }}</label>
         <output>{{ simulationDate }}</output>
       </div>
     </div>
@@ -113,8 +118,8 @@ function locateCurrentPosition(): void {
       <button
         type="button"
         class="playback-button"
-        :aria-label="store.isTimePlaying ? '暂停时间' : '播放时间'"
-        :title="store.isTimePlaying ? '暂停时间' : '播放时间'"
+        :aria-label="store.isTimePlaying ? t('controls.pauseTime') : t('controls.playTime')"
+        :title="store.isTimePlaying ? t('controls.pauseTime') : t('controls.playTime')"
         :aria-pressed="store.isTimePlaying"
         @click="store.isTimePlaying = !store.isTimePlaying"
       >
@@ -132,7 +137,7 @@ function locateCurrentPosition(): void {
         :min="store.simulationStartDay - 365.25"
         :max="store.simulationStartDay + 365.25"
         step="0.00001"
-        aria-label="模拟时间轴"
+        :aria-label="t('controls.timelineAria')"
         @input="store.isTimePlaying = false"
       >
     </div>
@@ -143,8 +148,8 @@ function locateCurrentPosition(): void {
 
     <div class="control-row">
       <div class="speed-label">
-        <label for="simulation-speed">时间流速</label>
-        <output>{{ store.simulationSpeed }}× 现实时间</output>
+        <label for="simulation-speed">{{ t('controls.speed') }}</label>
+        <output>{{ t('controls.speedUnit', { speed: store.simulationSpeed }) }}</output>
       </div>
       <input
         id="simulation-speed"
@@ -157,7 +162,7 @@ function locateCurrentPosition(): void {
     </div>
 
     <div class="coordinates" aria-live="polite">
-      <span>{{ store.currentBody.name }}实时坐标（示意单位）</span>
+      <span>{{ t('controls.coordinatesLabel', { name: t(`bodies.${store.currentBodyId}.name`) }) }}</span>
       <code>
         X {{ store.simulationCoordinates.x.toFixed(2) }}
         · Y {{ store.simulationCoordinates.y.toFixed(2) }}
@@ -166,7 +171,7 @@ function locateCurrentPosition(): void {
     </div>
 
     <label class="toggle-row" for="auxiliary-lines">
-      <span>显示辅助线</span>
+      <span>{{ t('controls.auxiliaryLines') }}</span>
       <input
         id="auxiliary-lines"
         v-model="store.auxiliaryLinesVisible"
@@ -180,10 +185,10 @@ function locateCurrentPosition(): void {
         class="action-button"
         @click="store.simulationDay = store.simulationStartDay"
       >
-        回到当前时间
+        {{ t('controls.backToNow') }}
       </button>
       <button type="button" class="action-button reset-button" @click="store.resetView">
-        重置视角
+        {{ t('controls.resetView') }}
       </button>
     </div>
     <div class="location-control">
@@ -193,7 +198,7 @@ function locateCurrentPosition(): void {
         :disabled="isLocating"
         @click="locateCurrentPosition"
       >
-        {{ isLocating ? '正在获取位置…' : '定位当前位置并显示在地球' }}
+        {{ isLocating ? t('controls.locating') : t('controls.locateButton') }}
       </button>
       <p v-if="locationMessage" class="location-message" aria-live="polite">
         {{ locationMessage }}

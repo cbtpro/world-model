@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUniverseStore } from '@/stores/universe'
 
 // 变体选择器：切换当前天体的不同模型变体
 const store = useUniverseStore()
 const router = useRouter()
+const { t } = useI18n()
 
 function selectVariant(variantId: string) {
   if (variantId === store.currentVariantId) return
@@ -20,16 +22,16 @@ function selectVariant(variantId: string) {
 
 <template>
   <div class="variant-selector">
-    <span class="title">模型变体</span>
+    <span class="title">{{ t('variantSelector.title') }}</span>
     <div class="btn-group">
       <button
         v-for="variant in store.currentBody.variants"
         :key="variant.id"
         :class="['btn', { active: variant.id === store.currentVariantId }]"
-        :title="variant.description"
+        :title="t(`bodies.${store.currentBodyId}.variants.${variant.id}.description`)"
         @click="selectVariant(variant.id)"
       >
-        {{ variant.name }}
+        {{ t(`bodies.${store.currentBodyId}.variants.${variant.id}.name`) }}
       </button>
     </div>
   </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useUniverseStore } from '@/stores/universe'
 import UniverseCanvas from '@/components/UniverseCanvas.vue'
 import LoadingOverlay from '@/components/LoadingOverlay.vue'
@@ -7,9 +8,11 @@ import BodySelector from '@/components/BodySelector.vue'
 import VariantSelector from '@/components/VariantSelector.vue'
 import LandmarkNavigator from '@/components/LandmarkNavigator.vue'
 import SceneControls from '@/components/SceneControls.vue'
+import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 
 // 主页面：组装画布 + 控制面板 + 加载遮罩
 const store = useUniverseStore()
+const { t } = useI18n()
 
 // 轻触退出禅模式所用的阈值：区分「点击」与「拖拽旋转视角」的手势
 const TAP_MOVEMENT_THRESHOLD = 10
@@ -60,13 +63,14 @@ onUnmounted(() => window.removeEventListener('keydown', exitZenMode))
     <div v-if="!store.isZenMode" class="ui-layer">
       <header class="top-bar">
         <BodySelector />
+        <LanguageSwitcher />
         <button
           type="button"
           class="zen-button"
-          aria-label="开启禅模式"
+          :aria-label="t('topBar.zenEnter')"
           @click="store.isZenMode = true"
         >
-          禅
+          {{ t('topBar.zenButton') }}
         </button>
       </header>
 
@@ -75,13 +79,13 @@ onUnmounted(() => window.removeEventListener('keydown', exitZenMode))
       </aside>
 
       <aside class="info-panel">
-        <h2 class="body-name">{{ store.currentBody.name }}</h2>
-        <p class="variant-name">{{ store.currentVariant.name }}</p>
+        <h2 class="body-name">{{ t(`bodies.${store.currentBodyId}.name`) }}</h2>
+        <p class="variant-name">{{ t(`bodies.${store.currentBodyId}.variants.${store.currentVariantId}.name`) }}</p>
         <p class="description">
-          {{ store.currentBody.description }}。{{ store.currentVariant.description }}
+          {{ t(`bodies.${store.currentBodyId}.description`) }}。{{ t(`bodies.${store.currentBodyId}.variants.${store.currentVariantId}.description`) }}
         </p>
         <p class="source">
-          {{ store.currentBodyId === 'moon' ? '月球数据来源：NASA SVS #14959' : '太阳、地球与月球同场景展示；轨道距离与模型大小为教学示意比例' }}
+          {{ store.currentBodyId === 'moon' ? t('infoPanel.moonSource') : t('infoPanel.defaultSource') }}
         </p>
       </aside>
 

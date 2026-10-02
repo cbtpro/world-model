@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useUniverseStore } from '@/stores/universe'
 
 // 加载遮罩：双阶段（场景初始化 + 模型加载进度）
 const store = useUniverseStore()
+const { t } = useI18n()
 
 const progressText = computed(() =>
   Math.round(store.loadingProgress),
@@ -21,12 +23,12 @@ const fileSizeHint = computed(() =>
         <!-- 场景初始化阶段 -->
         <template v-if="store.loadingPhase === 'scene'">
           <div class="spinner" />
-          <p class="label">初始化宇宙场景</p>
+          <p class="label">{{ t('loading.initScene') }}</p>
         </template>
 
         <!-- 模型加载阶段 -->
         <template v-else-if="store.loadingPhase === 'model'">
-          <p class="label">{{ store.loadingMessage }}</p>
+          <p class="label">{{ t(store.loadingMessage.key, store.loadingMessage.params ?? {}) }}</p>
           <div class="progress-track">
             <div
               class="progress-fill"

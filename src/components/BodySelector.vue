@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { bodyRegistry } from '@/config/bodies'
 import { useUniverseStore } from '@/stores/universe'
 
@@ -7,6 +8,7 @@ import { useUniverseStore } from '@/stores/universe'
 // 数据驱动渲染：未来在 registry 新增天体即自动出现在此列表
 const router = useRouter()
 const store = useUniverseStore()
+const { t } = useI18n()
 
 function selectBody(bodyId: string) {
   if (bodyId === store.currentBodyId) return
@@ -16,16 +18,16 @@ function selectBody(bodyId: string) {
 
 <template>
   <div class="body-selector">
-    <span class="title">天体</span>
+    <span class="title">{{ t('bodySelector.title') }}</span>
     <div class="btn-group">
       <button
         v-for="body in bodyRegistry.list"
         :key="body.id"
         :class="['btn', { active: body.id === store.currentBodyId }]"
-        :title="body.description"
+        :title="t(`bodies.${body.id}.description`)"
         @click="selectBody(body.id)"
       >
-        {{ body.name }}
+        {{ t(`bodies.${body.id}.name`) }}
       </button>
     </div>
   </div>
