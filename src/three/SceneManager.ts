@@ -559,18 +559,31 @@ export class SceneManager {
         uTime: { value: 0 },
         uViewport: { value: new THREE.Vector2(Math.max(this.container.clientWidth, 1), Math.max(this.container.clientHeight, 1)) },
         uMarkerSize: { value: 60 },
+        uSurfaceRadius: { value: radius },
       },
       vertexShader: `
         uniform vec2 uViewport;
         uniform float uMarkerSize;
+        uniform float uSurfaceRadius;
         varying vec2 vUv;
         void main() {
           vUv = uv;
-          // 中心跟随地表位置，四角在裁剪空间展开为固定 CSS 像素大小。
-          // 不受相机距离、地球缩放、观察角度和设备像素比影响。
-          vec4 center = projectionMatrix * modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-          center.xy += (uv - 0.5) * 2.0 * uMarkerSize / uViewport * center.w;
-          gl_Position = center;
+          vec3 center = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+          vec3 tangentX = normalize(modelViewMatrix[0].xyz);
+          vec3 tangentY = normalize(modelViewMatrix[1].xyz);
+          vec3 normal = normalize(modelViewMatrix[2].xyz);
+          float scale = length(modelViewMatrix[2].xyz);
+          float radius = uSurfaceRadius * scale;
+          float offset = 0.012 * scale;
+          // 根据距离补偿大小，但方向使用地表切线，不再始终朝向镜头。
+          float worldSize = 2.0 * max(-center.z, 0.0) * uMarkerSize
+            / (projectionMatrix[1][1] * uViewport.y);
+          vec2 delta = (uv - 0.5) * worldSize;
+          vec3 tangent = tangentX * delta.x + tangentY * delta.y;
+          // 将标记网格映射回球面，边缘也贴在地表而非悬浮切平面上。
+          vec3 sphereCenter = center - normal * (radius + offset);
+          vec3 surface = sphereCenter + normalize(normal * radius + tangent) * (radius + offset);
+          gl_Position = projectionMatrix * vec4(surface, 1.0);
         }
       `,
       fragmentShader: `
@@ -602,7 +615,7 @@ export class SceneManager {
       side: THREE.DoubleSide,
       toneMapped: false,
     })
-    const pulse = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.32), pulseMaterial)
+    const pulse = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.32, 32, 32), pulseMaterial)
     pulse.rotation.x = -Math.PI / 2
     marker.add(pulse)
     marker.visible = this.activeBodyId === 'earth'
