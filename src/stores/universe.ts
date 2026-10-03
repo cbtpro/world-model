@@ -37,7 +37,10 @@ export const useUniverseStore = defineStore('universe', () => {
   const modelLoading = ref(false)
   const loadingPhase = ref<LoadingPhase>('scene')
   const loadingProgress = ref(0) // 0-100
-  const loadingMessage = ref('')
+  // 加载提示消息：以翻译 key + 可选插值参数的形式存储，由 UI 调用 t() 渲染
+  const loadingMessage = ref<{ key: string; params?: Record<string, unknown> }>(
+    { key: '' },
+  )
 
   // ---- 计算属性 ----
   const currentBody = computed<CelestialBody>(
@@ -74,11 +77,11 @@ export const useUniverseStore = defineStore('universe', () => {
     sceneReady.value = ready
   }
 
-  function startModelLoading(message: string) {
+  function startModelLoading(key: string, params?: Record<string, unknown>) {
     modelLoading.value = true
     loadingPhase.value = 'model'
     loadingProgress.value = 0
-    loadingMessage.value = message
+    loadingMessage.value = { key, params }
   }
 
   function updateLoadingProgress(progress: number) {
@@ -89,13 +92,13 @@ export const useUniverseStore = defineStore('universe', () => {
     modelLoading.value = false
     loadingPhase.value = 'idle'
     loadingProgress.value = 100
-    loadingMessage.value = ''
+    loadingMessage.value = { key: '' }
   }
 
   function setScenePhase() {
     loadingPhase.value = 'scene'
     loadingProgress.value = 0
-    loadingMessage.value = '初始化宇宙场景'
+    loadingMessage.value = { key: 'loading.initScene' }
   }
 
   function resetView() {

@@ -10,6 +10,7 @@ import { ModelLoader } from './ModelLoader'
 import type { ProgressCallback } from './types'
 import { lunarLandmarks, type LunarLandmark } from '@/config/lunarLandmarks'
 import { lunarOrbiters } from '@/config/lunarOrbiters'
+import { i18n } from '@/i18n'
 
 const LANDMARK_SURFACE_OFFSET = 0.08
 
@@ -20,7 +21,6 @@ interface SurfaceLocation {
 
 export interface SceneBodyModel {
   id: string
-  name: string
   modelUrl: string
   visualDiameter: number
   visualDistanceFromSun: number
@@ -88,6 +88,8 @@ export class SceneManager {
   private surfaceLocation: SurfaceLocation | null = null
   private locationMarker: THREE.Group | null = null
   private locationPulseMaterial: THREE.ShaderMaterial | null = null
+  // 天体名称标签 DOM 元素，按 bodyId 索引，供语言切换时刷新文案
+  private bodyLabelElements = new Map<string, HTMLElement>()
 
   constructor(container: HTMLElement) {
     this.container = container
@@ -219,7 +221,7 @@ export class SceneManager {
         this.createLunarOrbiters(anchor, body.visualDiameter)
         this.updateLunarFeatureVisibility()
       }
-      this.createBodyLabel(model, body.name, body.visualDiameter)
+      this.createBodyLabel(model, body.id, body.visualDiameter)
       loadedCount += 1
       onProgress?.((loadedCount / bodies.length) * 100)
     }
@@ -279,7 +281,7 @@ export class SceneManager {
       this.createLunarOrbiters(anchor, body.visualDiameter)
       this.updateLunarFeatureVisibility()
     }
-    this.createBodyLabel(model, body.name, body.visualDiameter)
+    this.createBodyLabel(model, body.id, body.visualDiameter)
     this.setSimulationTime(this.simulationDay)
     if (body.id === 'earth') this.setSurfaceLocation(this.surfaceLocation)
     if (this.activeBodyId === body.id) {
@@ -504,6 +506,21 @@ export class SceneManager {
     this.controls.update()
   }
 
+  /** 语言切换后刷新所有 3D 场景中已创建的文本标签（天体名、地标名、探测器名） */
+  refreshLocaleLabels(): void {
+    for (const [bodyId, element] of this.bodyLabelElements) {
+      element.textContent = i18n.global.t(`bodies.${bodyId}.name`)
+    }
+    for (const { landmark, label } of this.landmarkLabels) {
+      const name = label.element.querySelector('.landmark-name')
+      if (name) name.textContent = i18n.global.t(`landmarks.${landmark.id}.name`)
+    }
+    for (const label of this.lunarOrbiterLabels) {
+      const orbiterId = label.element.dataset.orbiterId
+      if (orbiterId) label.element.textContent = i18n.global.t(`orbiters.${orbiterId}`)
+    }
+  }
+
   resetView(): number {
     let minimumX = Infinity
     let maximumX = -Infinity
@@ -618,7 +635,7 @@ export class SceneManager {
       dot.className = 'landmark-dot'
       const name = document.createElement('span')
       name.className = 'landmark-name'
-      name.textContent = landmark.name
+      name.textContent = i18n.global.t(`landmarks.${landmark.id}.name`)
       if (landmark.labelOffsetY) {
         name.style.transform = `translateY(${landmark.labelOffsetY}px)`
       }
@@ -1016,7 +1033,7 @@ export class SceneManager {
       const labelElement = document.createElement('div')
       labelElement.className = 'lunar-orbiter-label'
       labelElement.dataset.orbiterId = orbiter.id
-      labelElement.textContent = orbiter.name
+      labelElement.textContent = i18n.global.t(`orbiters.${orbiter.id}`)
       labelElement.setAttribute('aria-hidden', 'true')
       const label = new CSS2DObject(labelElement)
       label.position.set(0, 0.22, 0)
@@ -1235,17 +1252,19 @@ export class SceneManager {
 
   private createBodyLabel(
     model: THREE.Group,
-    name: string,
+    bodyId: string,
     diameter: number,
   ): void {
     const labelElement = document.createElement('div')
     labelElement.className = 'celestial-body-label'
-    labelElement.textContent = name
+    labelElement.dataset.bodyId = bodyId
+    labelElement.textContent = i18n.global.t(`bodies.${bodyId}.name`)
     labelElement.setAttribute('aria-hidden', 'true')
     const label = new CSS2DObject(labelElement)
     const scale = Math.abs(model.scale.x) || 1
     label.position.set(0, diameter / (2 * scale) + 0.6 / scale, 0)
     model.add(label)
+    this.bodyLabelElements.set(bodyId, labelElement)
   }
 
   private createOrbitLines(bodies: SceneBodyModel[]): void {
@@ -1411,6 +1430,7 @@ export class SceneManager {
     for (const anchor of this.bodyAnchors.values()) {
       anchor.parent?.remove(anchor)
     }
+    this.bodyLabelElements.clear()
     this.bodyModels.clear()
     this.bodyAnchors.clear()
     this.bodyOrbitPivots.clear()

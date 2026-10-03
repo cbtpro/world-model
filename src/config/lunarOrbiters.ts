@@ -1,6 +1,6 @@
 export interface LunarOrbiter {
+  /** 探测器唯一标识；显示名称通过 i18n 按此 id 查找 */
   id: string
-  name: string
   orbitalRadius: number
   orbitalPeriodDays: number
   inclinationDegrees: number
@@ -10,7 +10,6 @@ export interface LunarOrbiter {
 export const lunarOrbiters: LunarOrbiter[] = [
   {
     id: 'lro',
-    name: '月球勘测轨道飞行器',
     orbitalRadius: 2,
     orbitalPeriodDays: 0.074,
     inclinationDegrees: 72,
@@ -18,7 +17,6 @@ export const lunarOrbiters: LunarOrbiter[] = [
   },
   {
     id: 'kaguya',
-    name: '月球女神（SELENE）',
     orbitalRadius: 2.8,
     orbitalPeriodDays: 0.112,
     inclinationDegrees: 87,
@@ -26,7 +24,6 @@ export const lunarOrbiters: LunarOrbiter[] = [
   },
   {
     id: 'chandrayaan-1',
-    name: '月船一号',
     orbitalRadius: 3.6,
     orbitalPeriodDays: 0.15,
     inclinationDegrees: 64,

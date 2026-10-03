@@ -1,5 +1,6 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUniverseStore } from '@/stores/universe'
 import { SceneManager, type SceneBodyModel } from '@/three/SceneManager'
 import { bodyRegistry } from '@/config/bodies'
@@ -10,6 +11,7 @@ export function useSceneManager() {
   const containerRef = ref<HTMLElement | null>(null)
   const store = useUniverseStore()
   const route = useRoute()
+  const { t, locale } = useI18n()
 
   let sceneManager: SceneManager | null = null
   let loadingPromise: Promise<void> | null = null
@@ -46,7 +48,6 @@ export function useSceneManager() {
     const body = bodyRegistry.bodies[bodyId]
     return {
       id: body.id,
-      name: body.name,
       modelUrl,
       visualDiameter: body.visualDiameter ?? 12,
       visualDistanceFromSun: body.visualDistanceFromSun ?? 0,
@@ -72,7 +73,7 @@ export function useSceneManager() {
     sceneManager.setAuxiliaryLinesVisible(store.auxiliaryLinesVisible)
     sceneManager.setZenMode(store.isZenMode)
     store.setSceneReady(true)
-    store.startModelLoading('加载太阳、地球与月球')
+    store.startModelLoading('loading.initialLoad')
 
     const bodies = bodyRegistry.list.map((body) =>
       createSceneBody(
@@ -169,6 +170,8 @@ export function useSceneManager() {
     (landmarkId) => sceneManager?.setFocusedLandmark(landmarkId),
   )
 
+  watch(locale, () => sceneManager?.refreshLocaleLabels())
+
   async function navigateToSelection(): Promise<void> {
     const sequence = ++navigationSequence
     if (loadingPromise) await loadingPromise
@@ -182,7 +185,9 @@ export function useSceneManager() {
     updateSelectedCoordinates()
     if (sceneManager.getBodyModelUrl(body.id) === variant.modelUrl) return
 
-    store.startModelLoading(`加载「${variant.name}」模型`)
+    store.startModelLoading('loading.modelLoad', {
+      name: t(`bodies.${body.id}.variants.${variant.id}.name`),
+    })
     const modelLoad = sceneManager
       .replaceBodyModel(
         createSceneBody(body.id, variant.modelUrl),

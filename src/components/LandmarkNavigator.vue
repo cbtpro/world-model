@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { lunarLandmarks } from '@/config/lunarLandmarks'
 import { useUniverseStore } from '@/stores/universe'
 
 const store = useUniverseStore()
+const { t } = useI18n()
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
   embedded: false,
 })
@@ -20,19 +22,19 @@ function selectLandmark(id: string) {
   <section
     class="landmark-panel"
     :class="{ embedded: props.embedded }"
-    aria-label="月球历史地点导航"
+    :aria-label="t('landmarkNavigator.panelLabel')"
   >
     <header v-if="!props.embedded" class="panel-header">
       <div>
-        <span class="eyebrow">月球地图</span>
-        <h2>历史地点</h2>
+        <span class="eyebrow">{{ t('landmarkNavigator.eyebrow') }}</span>
+        <h2>{{ t('landmarkNavigator.title') }}</h2>
       </div>
-      <span class="count">{{ lunarLandmarks.length }} 个地点</span>
+      <span class="count">{{ t('landmarkNavigator.count', { count: lunarLandmarks.length }) }}</span>
     </header>
 
     <div class="landmark-list">
       <section class="landmark-group">
-        <h3>著名环形山</h3>
+        <h3>{{ t('landmarkNavigator.craterGroup') }}</h3>
         <button
           v-for="landmark in craters"
           :key="landmark.id"
@@ -43,14 +45,14 @@ function selectLandmark(id: string) {
         >
           <span class="marker crater" />
           <span class="landmark-copy">
-            <span class="landmark-name">{{ landmark.name }}</span>
-            <span class="landmark-coordinates">{{ landmark.coordinates }}</span>
+            <span class="landmark-name">{{ t(`landmarks.${landmark.id}.name`) }}</span>
+            <span class="landmark-coordinates">{{ t(`landmarks.${landmark.id}.coordinates`) }}</span>
           </span>
         </button>
       </section>
 
       <section class="landmark-group">
-        <h3>历史瞬间</h3>
+        <h3>{{ t('landmarkNavigator.momentGroup') }}</h3>
         <button
           v-for="landmark in moments"
           :key="landmark.id"
@@ -61,14 +63,14 @@ function selectLandmark(id: string) {
         >
           <span class="marker moment" />
           <span class="landmark-copy">
-            <span class="landmark-name">{{ landmark.name }}</span>
-            <span class="landmark-coordinates">{{ landmark.coordinates }}</span>
+            <span class="landmark-name">{{ t(`landmarks.${landmark.id}.name`) }}</span>
+            <span class="landmark-coordinates">{{ t(`landmarks.${landmark.id}.coordinates`) }}</span>
           </span>
         </button>
       </section>
 
       <section class="landmark-group">
-        <h3>登月与探测</h3>
+        <h3>{{ t('landmarkNavigator.missionGroup') }}</h3>
         <button
           v-for="landmark in missions"
           :key="landmark.id"
@@ -79,15 +81,15 @@ function selectLandmark(id: string) {
         >
           <span class="marker mission" />
           <span class="landmark-copy">
-            <span class="landmark-name">{{ landmark.name }}</span>
-            <span class="landmark-coordinates">{{ landmark.coordinates }}</span>
+            <span class="landmark-name">{{ t(`landmarks.${landmark.id}.name`) }}</span>
+            <span class="landmark-coordinates">{{ t(`landmarks.${landmark.id}.coordinates`) }}</span>
           </span>
         </button>
       </section>
     </div>
 
     <p v-if="store.selectedLandmark" class="landmark-detail">
-      {{ store.selectedLandmark.detail }}
+      {{ t(`landmarks.${store.selectedLandmark.id}.detail`) }}
     </p>
   </section>
 </template>
