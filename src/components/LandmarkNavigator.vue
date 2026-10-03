@@ -4,6 +4,9 @@ import { lunarLandmarks } from '@/config/lunarLandmarks'
 import { useUniverseStore } from '@/stores/universe'
 
 const store = useUniverseStore()
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
+  embedded: false,
+})
 const craters = computed(() => lunarLandmarks.filter(({ kind }) => kind === 'crater'))
 const missions = computed(() => lunarLandmarks.filter(({ kind }) => kind === 'mission'))
 const moments = computed(() => lunarLandmarks.filter(({ kind }) => kind === 'moment'))
@@ -14,8 +17,12 @@ function selectLandmark(id: string) {
 </script>
 
 <template>
-  <section class="landmark-panel" aria-label="月球历史地点导航">
-    <header class="panel-header">
+  <section
+    class="landmark-panel"
+    :class="{ embedded: props.embedded }"
+    aria-label="月球历史地点导航"
+  >
+    <header v-if="!props.embedded" class="panel-header">
       <div>
         <span class="eyebrow">月球地图</span>
         <h2>历史地点</h2>
@@ -95,6 +102,28 @@ function selectLandmark(id: string) {
   background: var(--color-panel);
   border: 1px solid var(--color-border);
   backdrop-filter: blur(12px);
+}
+
+.landmark-panel.embedded {
+  display: block;
+  width: 100%;
+  max-height: none;
+  background: transparent;
+  border: 0;
+  backdrop-filter: none;
+}
+
+.landmark-panel.embedded .landmark-list {
+  overflow: visible;
+  padding: 0;
+}
+
+.landmark-panel.embedded .landmark-group h3 {
+  padding-left: 0;
+}
+
+.landmark-panel.embedded .landmark-detail {
+  padding: 10px 0 0;
 }
 
 .panel-header {

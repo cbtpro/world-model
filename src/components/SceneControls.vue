@@ -2,6 +2,9 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUniverseStore } from '@/stores/universe'
+import BodySelector from '@/components/BodySelector.vue'
+import LandmarkNavigator from '@/components/LandmarkNavigator.vue'
+import VariantSelector from '@/components/VariantSelector.vue'
 
 const store = useUniverseStore()
 const router = useRouter()
@@ -70,165 +73,238 @@ function locateCurrentPosition(): void {
     aria-label="场景控制面板"
   >
     <header class="controls-header">
-      <h2>场景控制</h2>
-      <button
-        type="button"
-        class="collapse-button"
-        :aria-expanded="!isCollapsed"
-        :aria-label="isCollapsed ? '展开场景控制' : '折叠场景控制'"
-        @click="isCollapsed = !isCollapsed"
-      >
-        <span aria-hidden="true">{{ isCollapsed ? '展开' : '折叠' }}</span>
-        <span class="collapse-icon" aria-hidden="true">
-          {{ isCollapsed ? '⌃' : '⌄' }}
-        </span>
-      </button>
+      <div>
+        <span class="panel-kicker">{{ store.currentBody.name }}</span>
+        <h2>场景控制</h2>
+      </div>
+      <div class="header-actions">
+        <button
+          type="button"
+          class="zen-button"
+          :aria-label="store.isZenMode ? '退出禅模式' : '开启禅模式'"
+          :aria-pressed="store.isZenMode"
+          :title="store.isZenMode ? '退出禅模式' : '开启禅模式'"
+          @click="store.isZenMode = !store.isZenMode"
+        >
+          禅
+        </button>
+        <button
+          type="button"
+          class="collapse-button"
+          :aria-expanded="!isCollapsed"
+          :aria-label="isCollapsed ? '展开场景控制' : '折叠场景控制'"
+          @click="isCollapsed = !isCollapsed"
+        >
+          <svg class="collapse-icon" viewBox="0 0 16 16" aria-hidden="true">
+            <path
+              :d="isCollapsed ? 'M3.5 6 8 10.5 12.5 6' : 'M3.5 10 8 5.5 12.5 10'"
+            />
+          </svg>
+        </button>
+      </div>
     </header>
 
     <div v-show="!isCollapsed" class="controls-content">
-    <div class="control-row">
-      <label for="camera-distance">视距</label>
-      <div class="range-control">
-        <button type="button" aria-label="拉近视角" @click="changeZoom(-10)">−</button>
+      <div class="selection-controls">
+        <BodySelector />
+        <VariantSelector />
+      </div>
+
+      <details class="control-section">
+        <summary>天体信息</summary>
+        <div class="control-section-content info-copy">
+          <p class="info-variant">{{ store.currentVariant.name }}</p>
+          <p>
+            {{ store.currentBody.description }}。{{ store.currentVariant.description }}
+          </p>
+          <p class="info-source">
+            {{ store.currentBodyId === 'moon'
+              ? '月球数据来源：NASA SVS #14959'
+              : '太阳、地球与月球同场景展示；轨道距离与模型大小为教学示意比例' }}
+          </p>
+        </div>
+      </details>
+
+      <div class="control-row brightness-control">
+        <div class="speed-label">
+          <label for="dark-side-brightness">暗部亮度</label>
+          <output>{{ Math.round(store.darkSideBrightness * 100) }}%</output>
+        </div>
         <input
-          id="camera-distance"
-          v-model.number="store.cameraDistance"
+          id="dark-side-brightness"
+          v-model.number="store.darkSideBrightness"
           type="range"
-          min="1"
-          max="300"
-          step="1"
+          min="0"
+          max="1"
+          step="0.01"
         >
-        <button type="button" aria-label="拉远视角" @click="changeZoom(10)">+</button>
       </div>
-    </div>
 
-    <div class="time-header">
-      <div>
-        <label for="simulation-time">模拟时间</label>
-        <output>{{ simulationDate }}</output>
+      <div class="control-row">
+        <label for="camera-distance">视距</label>
+        <div class="range-control">
+          <button type="button" aria-label="拉近视角" @click="changeZoom(-10)">−</button>
+          <input
+            id="camera-distance"
+            v-model.number="store.cameraDistance"
+            type="range"
+            min="1"
+            max="300"
+            step="1"
+          >
+          <button type="button" aria-label="拉远视角" @click="changeZoom(10)">+</button>
+        </div>
       </div>
-    </div>
 
-    <div class="timeline-player">
-      <button
-        type="button"
-        class="playback-button"
-        :aria-label="store.isTimePlaying ? '暂停时间' : '播放时间'"
-        :title="store.isTimePlaying ? '暂停时间' : '播放时间'"
-        :aria-pressed="store.isTimePlaying"
-        @click="store.isTimePlaying = !store.isTimePlaying"
-      >
-        <svg v-if="store.isTimePlaying" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 5h4v14H7zm6 0h4v14h-4z" />
-        </svg>
-        <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 4.5v15l12-7.5z" />
-        </svg>
-      </button>
-      <input
-        id="simulation-time"
-        v-model.number="store.simulationDay"
-        type="range"
-        :min="store.simulationStartDay - 365.25"
-        :max="store.simulationStartDay + 365.25"
-        step="0.00001"
-        aria-label="模拟时间轴"
-        @input="store.isTimePlaying = false"
-      >
-    </div>
-    <div class="timeline-range">
-      <span>{{ startDate }}</span>
-      <span>{{ endDate }}</span>
-    </div>
+      <details class="control-section">
+        <summary>时间模拟</summary>
+        <div class="control-section-content">
+          <div class="time-header">
+            <label for="simulation-time">模拟时间</label>
+            <output>{{ simulationDate }}</output>
+          </div>
 
-    <div class="control-row">
-      <div class="speed-label">
-        <label for="simulation-speed">时间流速</label>
-        <output>{{ store.simulationSpeed }}× 现实时间</output>
-      </div>
-      <input
-        id="simulation-speed"
-        v-model.number="store.simulationSpeed"
-        type="range"
-        min="0.1"
-        max="1000"
-        step="0.1"
-      >
-    </div>
+          <div class="timeline-player">
+            <button
+              type="button"
+              class="playback-button"
+              :aria-label="store.isTimePlaying ? '暂停时间' : '播放时间'"
+              :title="store.isTimePlaying ? '暂停时间' : '播放时间'"
+              :aria-pressed="store.isTimePlaying"
+              @click="store.isTimePlaying = !store.isTimePlaying"
+            >
+              <svg v-if="store.isTimePlaying" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 5h4v14H7zm6 0h4v14h-4z" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 4.5v15l12-7.5z" />
+              </svg>
+            </button>
+            <input
+              id="simulation-time"
+              v-model.number="store.simulationDay"
+              type="range"
+              :min="store.simulationStartDay - 365.25"
+              :max="store.simulationStartDay + 365.25"
+              step="0.00001"
+              aria-label="模拟时间轴"
+              @input="store.isTimePlaying = false"
+            >
+          </div>
+          <div class="timeline-range">
+            <span>{{ startDate }}</span>
+            <span>{{ endDate }}</span>
+          </div>
 
-    <div class="coordinates" aria-live="polite">
-      <span>{{ store.currentBody.name }}实时坐标（示意单位）</span>
-      <code>
-        X {{ store.simulationCoordinates.x.toFixed(2) }}
-        · Y {{ store.simulationCoordinates.y.toFixed(2) }}
-        · Z {{ store.simulationCoordinates.z.toFixed(2) }}
-      </code>
-    </div>
+          <div class="control-row">
+            <div class="speed-label">
+              <label for="simulation-speed">时间流速</label>
+              <output>{{ store.simulationSpeed }}× 现实时间</output>
+            </div>
+            <input
+              id="simulation-speed"
+              v-model.number="store.simulationSpeed"
+              type="range"
+              min="0.1"
+              max="1000"
+              step="0.1"
+            >
+          </div>
+          <button
+            type="button"
+            class="action-button current-time-button"
+            @click="store.simulationDay = store.simulationStartDay"
+          >
+            回到当前时间
+          </button>
+        </div>
+      </details>
 
-    <label class="toggle-row" for="auxiliary-lines">
-      <span>显示辅助线</span>
-      <input
-        id="auxiliary-lines"
-        v-model="store.auxiliaryLinesVisible"
-        type="checkbox"
-      >
-    </label>
+      <details class="control-section">
+        <summary>视图与定位</summary>
+        <div class="control-section-content">
+          <label class="toggle-row" for="auxiliary-lines">
+            <span>显示辅助线</span>
+            <input
+              id="auxiliary-lines"
+              v-model="store.auxiliaryLinesVisible"
+              type="checkbox"
+            >
+          </label>
 
-    <div class="actions">
-      <button
-        type="button"
-        class="action-button"
-        @click="store.simulationDay = store.simulationStartDay"
-      >
-        回到当前时间
-      </button>
-      <button type="button" class="action-button reset-button" @click="store.resetView">
-        重置视角
-      </button>
-    </div>
-    <div class="location-control">
-      <button
-        type="button"
-        class="action-button location-button"
-        :disabled="isLocating"
-        @click="locateCurrentPosition"
-      >
-        {{ isLocating ? '正在获取位置…' : '定位当前位置并显示在地球' }}
-      </button>
-      <p v-if="locationMessage" class="location-message" aria-live="polite">
-        {{ locationMessage }}
-      </p>
-    </div>
+          <div class="coordinates" aria-live="polite">
+            <span>{{ store.currentBody.name }}实时坐标（示意单位）</span>
+            <code>
+              X {{ store.simulationCoordinates.x.toFixed(2) }}
+              · Y {{ store.simulationCoordinates.y.toFixed(2) }}
+              · Z {{ store.simulationCoordinates.z.toFixed(2) }}
+            </code>
+          </div>
+
+          <button type="button" class="action-button reset-button" @click="store.resetView">
+            重置视角
+          </button>
+          <div class="location-control">
+            <button
+              type="button"
+              class="action-button location-button"
+              :disabled="isLocating"
+              @click="locateCurrentPosition"
+            >
+              {{ isLocating ? '正在获取位置…' : '定位当前位置并显示在地球' }}
+            </button>
+            <p v-if="locationMessage" class="location-message" aria-live="polite">
+              {{ locationMessage }}
+            </p>
+          </div>
+        </div>
+      </details>
+
+      <details v-if="store.currentBodyId === 'moon'" class="control-section landmark-section">
+        <summary>月球地点</summary>
+        <div class="control-section-content">
+          <LandmarkNavigator embedded />
+        </div>
+      </details>
     </div>
   </section>
 </template>
 
 <style scoped>
 .scene-controls {
-  width: 260px;
-  max-height: calc(100vh - 56px);
+  width: min(320px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
   overflow-y: auto;
-  padding: 0 16px 14px;
+  padding: 0 12px 10px;
   color: var(--color-text);
   background: var(--color-panel);
   border: 1px solid var(--color-border);
+  backdrop-filter: blur(12px);
   pointer-events: auto;
 }
 
 .controls-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 44px;
+  min-height: 48px;
+  background: var(--color-panel);
+  border-bottom: 1px solid rgba(80, 120, 200, 0.22);
 }
 
 .scene-controls.collapsed {
   padding-bottom: 0;
 }
 
-.controls-content {
-  padding-bottom: 1px;
+.panel-kicker {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--color-accent);
+  font-size: 10px;
 }
 
 h2 {
@@ -236,31 +312,96 @@ h2 {
   font-weight: 600;
 }
 
-.collapse-button {
-  display: inline-flex;
+.header-actions {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 7px;
+  gap: 4px;
+}
+
+.zen-button,
+.collapse-button {
+  display: flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   color: var(--color-text-dim);
   background: rgba(40, 60, 90, 0.65);
   border: 1px solid var(--color-border);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1;
 }
 
+.collapse-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.zen-button:hover,
+.zen-button[aria-pressed='true'],
 .collapse-button:hover {
   color: var(--color-text);
   background: var(--color-accent-dim);
 }
 
-.collapse-icon {
-  font-size: 14px;
-  line-height: 1;
+.controls-content {
+  padding-bottom: 4px;
+}
+
+.selection-controls {
+  display: grid;
+  gap: 8px;
+  padding: 9px 0 8px;
+  border-bottom: 1px solid rgba(80, 120, 200, 0.22);
+}
+
+:deep(.body-selector),
+:deep(.variant-selector) {
+  gap: 5px;
+}
+
+:deep(.body-selector .title),
+:deep(.variant-selector .title) {
+  font-size: 10px;
+}
+
+:deep(.btn-group) {
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+:deep(.btn:not(:first-child)) {
+  border-left: 1px solid var(--color-border);
+}
+
+:deep(.btn) {
+  min-width: 0;
+  min-height: 28px;
+  flex: 1 1 auto;
+  padding: 5px 7px;
+  border-radius: 2px;
+  font-size: 11px;
+  white-space: normal;
 }
 
 .control-row {
   display: grid;
-  gap: 7px;
-  margin-top: 12px;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.brightness-control {
+  padding: 8px 0 1px;
+  border-bottom: 1px solid rgba(80, 120, 200, 0.22);
 }
 
 .time-header {
@@ -274,6 +415,60 @@ h2 {
 .time-header > div {
   display: grid;
   gap: 4px;
+}
+
+.control-section {
+  margin-top: 9px;
+  border-bottom: 1px solid rgba(80, 120, 200, 0.22);
+}
+
+.control-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  color: var(--color-text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.control-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.control-section > summary::after {
+  content: '+';
+  color: var(--color-accent);
+  font-size: 16px;
+}
+
+.control-section[open] > summary::after {
+  content: '−';
+}
+
+.control-section-content {
+  display: grid;
+  gap: 6px;
+  padding: 1px 0 8px;
+}
+
+.control-section-content .control-row {
+  margin-top: 4px;
+}
+
+.info-copy {
+  color: var(--color-text-dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.info-variant {
+  color: var(--color-accent);
+}
+
+.info-source {
+  opacity: 0.7;
 }
 
 .timeline-player {
@@ -290,9 +485,9 @@ h2 {
 
 .playback-button {
   display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
   place-items: center;
   color: #fff;
   background: var(--color-accent-dim);
@@ -350,7 +545,6 @@ label {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 14px;
   cursor: pointer;
 }
 
@@ -377,18 +571,22 @@ input[type='range'] {
 
 .range-control button,
 .action-button {
-  min-height: 30px;
-  padding: 5px 9px;
+  min-height: 28px;
+  padding: 4px 7px;
   color: var(--color-text);
   background: rgba(40, 60, 90, 0.65);
   border: 1px solid var(--color-border);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .actions {
   display: flex;
   gap: 8px;
   margin-top: 14px;
+}
+
+.current-time-button {
+  width: 100%;
 }
 
 .location-control {
@@ -423,5 +621,65 @@ input[type='range'] {
 .reset-button {
   color: #fff;
   background: var(--color-accent-dim);
+}
+
+.location-control {
+  margin-top: 0;
+}
+
+.landmark-section .control-section-content {
+  display: block;
+}
+
+@media (max-width: 600px) {
+  .scene-controls {
+    padding: 0 12px 10px;
+  }
+
+  .controls-header {
+    min-height: 52px;
+  }
+
+  .zen-button,
+  .collapse-button {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+  }
+
+  .collapse-icon {
+    width: 18px;
+    height: 18px;
+    flex-basis: 18px;
+  }
+
+  :deep(.btn) {
+    min-height: 44px;
+  }
+
+  .control-section > summary {
+    min-height: 44px;
+  }
+
+  .playback-button {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+  }
+
+  .range-control button,
+  .action-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  input[type='range'] {
+    height: 36px;
+  }
+
+  input[type='checkbox'] {
+    width: 20px;
+    height: 20px;
+  }
 }
 </style>

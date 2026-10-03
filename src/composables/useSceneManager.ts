@@ -67,6 +67,7 @@ export function useSceneManager() {
     if (!containerRef.value) return
     store.setScenePhase()
     sceneManager = new SceneManager(containerRef.value)
+    sceneManager.setDarkSideBrightness(store.darkSideBrightness)
     sceneManager.init()
     sceneManager.setAuxiliaryLinesVisible(store.auxiliaryLinesVisible)
     sceneManager.setZenMode(store.isZenMode)
@@ -133,6 +134,11 @@ export function useSceneManager() {
   watch(
     () => store.cameraDistance,
     (distance) => sceneManager?.setCameraDistance(distance),
+  )
+
+  watch(
+    () => store.darkSideBrightness,
+    (brightness) => sceneManager?.setDarkSideBrightness(brightness),
   )
 
   watch(

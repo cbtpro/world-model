@@ -19,6 +19,7 @@ export const useUniverseStore = defineStore('universe', () => {
   const simulationStartDay = Date.now() / 86_400_000
   const simulationDay = ref(simulationStartDay)
   const simulationSpeed = ref(1)
+  const darkSideBrightness = ref(0.45)
   const isTimePlaying = ref(false)
   const simulationCoordinates = ref({ x: 0, y: 0, z: 0 })
   const auxiliaryLinesVisible = ref(false)
@@ -116,6 +117,7 @@ export const useUniverseStore = defineStore('universe', () => {
     simulationStartDay,
     simulationDay,
     simulationSpeed,
+    darkSideBrightness,
     isTimePlaying,
     simulationCoordinates,
     auxiliaryLinesVisible,

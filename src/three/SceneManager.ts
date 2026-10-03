@@ -57,6 +57,7 @@ export class SceneManager {
   private starfield: Starfield
   private axes: UniverseAxes
   private sunLight: THREE.DirectionalLight
+  private earthFillLight: THREE.DirectionalLight
   private modelLoader: ModelLoader
   private currentModel: THREE.Group | null = null
   private bodyModels = new Map<string, THREE.Group>()
@@ -128,7 +129,13 @@ export class SceneManager {
     this.scene.add(new THREE.AmbientLight(0x404060, 0.3))
     this.sunLight = new THREE.DirectionalLight(0xffffff, 4.5)
     this.sunLight.position.set(0, 0, 0)
-    this.scene.add(this.sunLight, this.sunLight.target)
+    this.earthFillLight = new THREE.DirectionalLight(0x9bbcff, 0.45)
+    this.scene.add(
+      this.sunLight,
+      this.sunLight.target,
+      this.earthFillLight,
+      this.earthFillLight.target,
+    )
 
     // 星空与坐标系
     this.starfield = new Starfield()
@@ -414,6 +421,10 @@ export class SceneManager {
     }
   }
 
+  setDarkSideBrightness(brightness: number): void {
+    this.earthFillLight.intensity = THREE.MathUtils.clamp(brightness, 0, 1)
+  }
+
   setZenMode(enabled: boolean): void {
     this.cssRenderer.domElement.style.visibility = enabled ? 'hidden' : 'visible'
   }
@@ -438,17 +449,6 @@ export class SceneManager {
     marker.position.copy(direction).multiplyScalar(radius + 0.035)
     marker.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction)
 
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.09, 0.012, 12, 48),
-      new THREE.MeshBasicMaterial({
-        color: 0x9fffe5,
-        transparent: true,
-        opacity: 0.95,
-        depthWrite: false,
-      }),
-    )
-    marker.add(ring)
-
     const pulseMaterial = new THREE.ShaderMaterial({
       uniforms: { uTime: { value: 0 } },
       vertexShader: `
@@ -462,16 +462,16 @@ export class SceneManager {
         uniform float uTime;
         varying vec2 vUv;
         void main() {
-          float radius = mod(uTime * 0.22, 0.9);
+          float radius = mod(uTime * 0.1466667, 0.6);
           float distanceFromCenter = length((vUv - 0.5) * 2.0);
           float edge = abs(distanceFromCenter - radius);
           float alpha = (1.0 - smoothstep(0.012, 0.07, edge))
-            * (1.0 - smoothstep(0.55, 0.9, radius))
+            * (1.0 - smoothstep(0.3667, 0.6, radius))
             * 0.85;
           vec3 color = mix(
             vec3(0.16, 0.95, 0.78),
             vec3(0.7, 0.95, 1.0),
-            smoothstep(0.0, 0.9, radius)
+            smoothstep(0.0, 0.6, radius)
           );
           gl_FragColor = vec4(color, alpha);
         }
@@ -585,6 +585,16 @@ export class SceneManager {
     sun.getWorldPosition(this.sunLight.position)
     earth.getWorldPosition(this.sunLight.target.position)
     this.sunLight.target.updateMatrixWorld()
+
+    const antiSolarDirection = this.sunLight.position
+      .clone()
+      .sub(this.sunLight.target.position)
+      .normalize()
+    this.earthFillLight.position
+      .copy(this.sunLight.target.position)
+      .addScaledVector(antiSolarDirection, -100)
+    this.earthFillLight.target.position.copy(this.sunLight.target.position)
+    this.earthFillLight.target.updateMatrixWorld()
   }
 
   private createLandmarkLabels(model: THREE.Group, diameter: number): void {
