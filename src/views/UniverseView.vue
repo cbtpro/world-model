@@ -4,6 +4,12 @@ import { useUniverseStore } from '@/stores/universe'
 import UniverseCanvas from '@/components/UniverseCanvas.vue'
 import LoadingOverlay from '@/components/LoadingOverlay.vue'
 import SceneControls from '@/components/SceneControls.vue'
+import type { TransitionAlgorithm } from '@/animation/paths'
+
+const props = withDefaults(defineProps<{
+  transitionAlgorithm?: TransitionAlgorithm
+  chaikinIterations?: number
+}>(), { transitionAlgorithm: 'bezier', chaikinIterations: 3 })
 
 // 主页面：组装画布 + 控制面板 + 加载遮罩
 const store = useUniverseStore()
@@ -51,14 +57,19 @@ onUnmounted(() => window.removeEventListener('keydown', exitZenMode))
     @pointerup="handleZenPointerUp"
   >
     <!-- Three.js 渲染层 -->
-    <UniverseCanvas />
+    <UniverseCanvas
+      :transition-algorithm="props.transitionAlgorithm"
+      :chaikin-iterations="props.chaikinIterations"
+    />
 
     <!-- UI 控制层 -->
+    <Transition name="panel">
     <div v-if="!store.isZenMode" class="ui-layer">
       <aside class="scene-control-panel">
         <SceneControls />
       </aside>
     </div>
+    </Transition>
 
     <!-- 加载遮罩 -->
     <LoadingOverlay v-if="!store.isZenMode" />

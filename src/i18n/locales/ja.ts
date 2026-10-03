@@ -24,6 +24,10 @@ const messages: MessageSchema = {
     defaultSource: '太陽・地球・月を同じシーンに表示しています。軌道距離とモデルサイズは説明用の縮尺です',
   },
   controls: {
+    orbitDemo: '公転デモ',
+    daysPerSecond: '1秒あたり{days}日',
+    hoursPerSecond: '1秒あたり{hours}時間',
+
     zenExit: '禅モードを終了',
     bodyInfo: '天体情報',
     darkSideBrightness: '暗部の明るさ',

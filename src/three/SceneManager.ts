@@ -11,6 +11,12 @@ import type { ProgressCallback } from './types'
 import { lunarLandmarks, type LunarLandmark } from '@/config/lunarLandmarks'
 import { lunarOrbiters } from '@/config/lunarOrbiters'
 import { i18n } from '@/i18n'
+import { Motion } from '@/animation/Motion'
+import { CameraMotion } from '@/animation/CameraMotion'
+import { cubicBezier } from '@/animation/easing'
+import type { TransitionOptions } from '@/animation/paths'
+import { solarOverviewDistance } from '@/config/simulation'
+import { orbitPoint, solveEccentricAnomaly } from './orbits'
 
 const LANDMARK_SURFACE_OFFSET = 0.08
 
@@ -28,6 +34,7 @@ export interface SceneBodyModel {
   primaryId?: string
   rotationPeriodDays: number
   orbitalPeriodDays: number
+  orbitalEccentricity?: number
   tidallyLockedToPrimary?: boolean
   includeLunarLandmarks?: boolean
 }
@@ -48,6 +55,12 @@ interface LunarOrbiterModel {
 // 场景管理器：封装 Three.js 渲染器/场景/相机/控制器/灯光/渲染循环
 // 命令式类，不使用 Vue 响应式包装（避免 Three 对象被 Proxy 代理导致性能损耗）
 export class SceneManager {
+  private motion = new Motion()
+  private cameraMotion: CameraMotion
+  private reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+  private transitionOptions: TransitionOptions = { algorithm: 'bezier', chaikinIterations: 3 }
+  private cameraCurve = cubicBezier(0.42, 0, 0.2, 1)
+  private materialOpacity = new WeakMap<THREE.Material, { opacity: number; transparent: boolean }>()
   private container: HTMLElement
   private renderer: THREE.WebGLRenderer
   private cssRenderer: CSS2DRenderer
@@ -68,6 +81,7 @@ export class SceneManager {
   private bodyDiameters = new Map<string, number>()
   private bodyRotationPeriods = new Map<string, number>()
   private bodyOrbitalPeriods = new Map<string, number>()
+  private bodyOrbits = new Map<string, { semiMajorAxis: number; eccentricity: number }>()
   private tidallyLockedBodies = new Set<string>()
   private activeBodyId = ''
   private isSystemView = false
@@ -120,11 +134,14 @@ export class SceneManager {
 
     // 控制器
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
+    this.cameraMotion = new CameraMotion(this.motion, this.camera, this.controls.target)
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.05
     this.controls.minDistance = 1
-    this.controls.maxDistance = 300
+    this.controls.maxDistance = 600
     this.controls.rotateSpeed = 0.5
+    this.renderer.domElement.addEventListener('pointerdown', this.interruptCameraMotion)
+    this.renderer.domElement.addEventListener('wheel', this.interruptCameraMotion, { passive: true })
 
     // 环境光只保留微弱填充光；太阳方向光负责实时昼夜明暗。
     // 提高环境光与太阳光强度，避免贴图在默认曝光下显得过暗、细节难以辨认。
@@ -144,6 +161,7 @@ export class SceneManager {
     this.scene.add(this.starfield.points)
 
     this.axes = new UniverseAxes()
+    this.axes.group.visible = this.auxiliaryLinesVisible
     this.scene.add(this.axes.group)
 
     // 模型加载器
@@ -199,6 +217,9 @@ export class SceneManager {
         0,
       )
       anchor.position.copy(position)
+      this.bodyOrbits.set(body.id, {
+        semiMajorAxis: position.x, eccentricity: body.orbitalEccentricity ?? 0,
+      })
       const model = await this.modelLoader.load(
         body.modelUrl,
         (progress) =>
@@ -282,6 +303,8 @@ export class SceneManager {
       this.updateLunarFeatureVisibility()
     }
     this.createBodyLabel(model, body.id, body.visualDiameter)
+    model.visible = false
+    this.fadeObject(`model-${body.id}`, model, true)
     this.setSimulationTime(this.simulationDay)
     if (body.id === 'earth') this.setSurfaceLocation(this.surfaceLocation)
     if (this.activeBodyId === body.id) {
@@ -307,7 +330,14 @@ export class SceneManager {
     // 轨道位置须先于自转计算：地球自转对齐真实 UTC 时间依赖其当前世界坐标。
     for (const [bodyId, anchor] of this.bodyOrbitPivots) {
       const period = this.bodyOrbitalPeriods.get(bodyId)
-      anchor.rotation.y = period ? ((days % period) / period) * Math.PI * 2 : 0
+      const orbit = this.bodyOrbits.get(bodyId)
+      const bodyAnchor = this.bodyAnchors.get(bodyId)
+      if (!orbit || !bodyAnchor) continue
+      const meanAnomaly = period ? ((days % period) / period) * Math.PI * 2 : 0
+      const anomaly = solveEccentricAnomaly(meanAnomaly, orbit.eccentricity)
+      const point = orbitPoint(orbit.semiMajorAxis, orbit.eccentricity, anomaly)
+      anchor.rotation.y = Math.atan2(-point.z, point.x)
+      bodyAnchor.position.set(Math.hypot(point.x, point.z), 0, 0)
     }
 
     const sunModel = this.bodyModels.get('sun')
@@ -376,21 +406,45 @@ export class SceneManager {
     return preSpinBearing - subsolarLongitudeRad
   }
 
-  setActiveBody(bodyId: string): number {
+  private getSolarOverviewRadius(): number {
+    const sun = this.bodyModels.get('sun')
+    if (!sun) return 60
+    const center = sun.getWorldPosition(new THREE.Vector3())
+    let radius = (this.bodyDiameters.get('sun') ?? 18) / 2
+    for (const [id, model] of this.bodyModels) {
+      radius = Math.max(radius, model.getWorldPosition(new THREE.Vector3()).distanceTo(center) + (this.bodyDiameters.get(id) ?? 0) / 2)
+    }
+    // 覆盖月球绕地球一周的最大包络，避免月球移动后超出取景范围。
+    const earth = this.bodyOrbits.get('earth')
+    const moon = this.bodyOrbits.get('moon')
+    const earthOrbit = earth ? earth.semiMajorAxis * (1 + earth.eccentricity) : 0
+    const moonOrbit = moon ? moon.semiMajorAxis * (1 + moon.eccentricity) : 0
+    return Math.max(radius, earthOrbit + moonOrbit + (this.bodyDiameters.get('moon') ?? 0) / 2)
+  }
+
+  setActiveBody(bodyId: string, immediate = false): number {
     const model = this.bodyModels.get(bodyId)
     if (!model) throw new Error(`场景中不存在天体「${bodyId}」`)
+    if (this.activeBodyId === bodyId && !this.isSystemView) {
+      return this.cameraMotion.destinationDistance ?? this.camera.position.distanceTo(this.controls.target)
+    }
     this.isSystemView = false
+    this.focusedLandmarkId = null
+    this.focusedWorldPosition = null
     this.activeBodyId = bodyId
     this.updateLunarFeatureVisibility()
     this.currentModel = model
     this.currentModel.updateWorldMatrix(true, false)
     const target = model.getWorldPosition(new THREE.Vector3())
-    const distance = Math.max(3, (this.bodyDiameters.get(bodyId) ?? 12) * 2.5)
-    const offset = new THREE.Vector3(0, 0.2, 1).setLength(distance)
-    this.controls.target.copy(target)
-    this.camera.position.copy(target).add(offset)
+    const distance = bodyId === 'sun'
+      ? Math.min(this.controls.maxDistance, solarOverviewDistance(this.getSolarOverviewRadius(), this.camera.fov, this.camera.aspect))
+      : Math.max(3, (this.bodyDiameters.get(bodyId) ?? 12) * 2.5)
+    const offset = (bodyId === 'sun' ? new THREE.Vector3(0, 1, 0.55) : new THREE.Vector3(0, 0.2, 1)).setLength(distance)
+    for (const [index, line] of this.orbitLines.entries()) {
+      this.fadeObject(`orbit-${index}`, line, this.auxiliaryLinesVisible)
+    }
     this.focusedBodyWorldPosition = target
-    this.controls.update()
+    this.moveCamera(() => ({ target: model.getWorldPosition(new THREE.Vector3()), offset }), 1000, immediate)
     return distance
   }
 
@@ -410,25 +464,74 @@ export class SceneManager {
     }
     if (this.activeBodyId !== 'moon') {
       for (const { label } of this.landmarkLabels) {
-        label.element.style.display = 'none'
+        label.visible = false
       }
     }
   }
 
   setAuxiliaryLinesVisible(visible: boolean): void {
+    if (visible === this.auxiliaryLinesVisible) return
     this.auxiliaryLinesVisible = visible
-    this.axes.group.visible = visible
-    for (const line of this.orbitLines) {
-      line.visible = visible
+    this.fadeObject('axes', this.axes.group, visible)
+    for (const [index, line] of this.orbitLines.entries()) {
+      this.fadeObject(`orbit-${index}`, line, visible)
     }
   }
 
+  private fadeObject(channel: string, object: THREE.Object3D, visible: boolean): void {
+    const materials = new Set<THREE.Material>()
+    const labels: HTMLElement[] = []
+    object.traverse((child) => {
+      if (child instanceof THREE.Mesh || child instanceof THREE.Line || child instanceof THREE.Points) {
+        for (const material of Array.isArray(child.material) ? child.material : [child.material]) {
+          materials.add(material)
+          if (!this.materialOpacity.has(material)) {
+            this.materialOpacity.set(material, { opacity: material.opacity, transparent: material.transparent })
+          }
+        }
+      }
+      if (child instanceof CSS2DObject) labels.push(child.element)
+    })
+    const from = object.visible ? Number(object.userData.motionOpacity ?? 1) : 0
+    object.visible = true
+    const apply = (alpha: number) => {
+      object.userData.motionOpacity = alpha
+      for (const material of materials) {
+        const original = this.materialOpacity.get(material)!
+        const transparent = alpha < 1 || original.transparent
+        if (material.transparent !== transparent) {
+          material.transparent = transparent
+          material.needsUpdate = true
+        }
+        material.opacity = original.opacity * alpha
+      }
+      for (const label of labels) label.style.opacity = String(alpha)
+    }
+    apply(from)
+    this.motion.start(channel, (t) => apply(THREE.MathUtils.lerp(from, visible ? 1 : 0, t)), {
+      duration: 320, immediate: this.reducedMotion.matches,
+      complete: () => { object.visible = visible },
+    })
+  }
+
   setDarkSideBrightness(brightness: number): void {
-    this.earthFillLight.intensity = THREE.MathUtils.clamp(brightness, 0, 1)
+    const from = this.earthFillLight.intensity
+    const to = THREE.MathUtils.clamp(brightness, 0, 1)
+    this.motion.start('brightness', (t) => {
+      this.earthFillLight.intensity = THREE.MathUtils.lerp(from, to, t)
+    }, { duration: 180, immediate: this.reducedMotion.matches })
   }
 
   setZenMode(enabled: boolean): void {
-    this.cssRenderer.domElement.style.visibility = enabled ? 'hidden' : 'visible'
+    const element = this.cssRenderer.domElement
+    const from = Number(element.style.opacity || 1)
+    element.style.visibility = 'visible'
+    this.motion.start('labels', (t) => {
+      element.style.opacity = String(THREE.MathUtils.lerp(from, enabled ? 0 : 1, t))
+    }, {
+      duration: 260, immediate: this.reducedMotion.matches,
+      complete: () => { element.style.visibility = enabled ? 'hidden' : 'visible' },
+    })
   }
 
   setSurfaceLocation(location: SurfaceLocation | null): void {
@@ -448,42 +551,58 @@ export class SceneManager {
     ).normalize()
     const radius = (this.bodyDiameters.get('earth') ?? 4) / 2
     const marker = new THREE.Group()
-    marker.position.copy(direction).multiplyScalar(radius + 0.035)
+    marker.position.copy(direction).multiplyScalar(radius + 0.012)
     marker.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction)
 
     const pulseMaterial = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 } },
+      uniforms: {
+        uTime: { value: 0 },
+        uViewport: { value: new THREE.Vector2(Math.max(this.container.clientWidth, 1), Math.max(this.container.clientHeight, 1)) },
+        uMarkerSize: { value: 60 },
+      },
       vertexShader: `
+        uniform vec2 uViewport;
+        uniform float uMarkerSize;
         varying vec2 vUv;
         void main() {
           vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          // 中心跟随地表位置，四角在裁剪空间展开为固定 CSS 像素大小。
+          // 不受相机距离、地球缩放、观察角度和设备像素比影响。
+          vec4 center = projectionMatrix * modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+          center.xy += (uv - 0.5) * 2.0 * uMarkerSize / uViewport * center.w;
+          gl_Position = center;
         }
       `,
       fragmentShader: `
         uniform float uTime;
         varying vec2 vUv;
         void main() {
-          float radius = mod(uTime * 0.1466667, 0.6);
           float distanceFromCenter = length((vUv - 0.5) * 2.0);
-          float edge = abs(distanceFromCenter - radius);
-          float alpha = (1.0 - smoothstep(0.012, 0.07, edge))
-            * (1.0 - smoothstep(0.3667, 0.6, radius))
-            * 0.85;
-          vec3 color = mix(
-            vec3(0.16, 0.95, 0.78),
-            vec3(0.7, 0.95, 1.0),
-            smoothstep(0.0, 0.6, radius)
+          // 屏幕空间导数让圆点和细环的边缘始终保持约一个像素的过渡。
+          float aa = max(fwidth(distanceFromCenter), 0.001);
+          float dotMask = 1.0 - smoothstep(0.18 - aa, 0.18 + aa, distanceFromCenter);
+          float rimMask = 1.0 - smoothstep(
+            0.016 - aa, 0.016 + aa, abs(distanceFromCenter - 0.23)
           );
+          float halo = exp(-distanceFromCenter * distanceFromCenter * 24.0) * 0.18;
+
+          float phase = fract(uTime / 2.8);
+          float pulseRadius = mix(0.3, 0.85, phase);
+          float pulseMask = 1.0 - smoothstep(
+            0.009 - aa, 0.009 + aa, abs(distanceFromCenter - pulseRadius)
+          );
+          float pulse = pulseMask * sin(phase * 3.14159265) * (1.0 - phase) * 0.35;
+          float alpha = max(max(dotMask, rimMask * 0.85), halo + pulse);
+          vec3 color = mix(vec3(0.18, 0.88, 0.78), vec3(0.88, 1.0, 0.98), dotMask);
           gl_FragColor = vec4(color, alpha);
         }
       `,
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      toneMapped: false,
     })
-    const pulse = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), pulseMaterial)
+    const pulse = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.32), pulseMaterial)
     pulse.rotation.x = -Math.PI / 2
     marker.add(pulse)
     marker.visible = this.activeBodyId === 'earth'
@@ -492,18 +611,62 @@ export class SceneManager {
     this.locationPulseMaterial = pulseMaterial
   }
 
+  focusSurfaceLocation(): number | null {
+    const earth = this.bodyModels.get('earth')
+    const marker = this.locationMarker
+    if (!earth || !marker || this.activeBodyId !== 'earth') return null
+
+    earth.updateWorldMatrix(true, true)
+    const center = earth.getWorldPosition(new THREE.Vector3())
+    const distance = Math.max(3, (this.bodyDiameters.get('earth') ?? 4) * 2)
+    // 移动相机到定位点的地表法线方向，保持真实自转和昼夜关系。
+    this.focusedWorldPosition = null
+    this.focusedLandmarkId = null
+    this.focusedBodyWorldPosition = center
+    this.moveCamera(() => {
+      earth.updateWorldMatrix(true, true)
+      const target = earth.getWorldPosition(new THREE.Vector3())
+      const offset = marker.getWorldPosition(new THREE.Vector3()).sub(target).normalize().multiplyScalar(distance)
+      return { target, offset }
+    }, 1100)
+    return distance
+  }
+
   setCameraDistance(distance: number): void {
+    // store 写回最终距离时，不覆盖正在执行的天体/定位切换。
+    if (this.cameraMotion.destinationDistance !== null &&
+      Math.abs(distance - this.cameraMotion.destinationDistance) < 0.001) return
     const offset = this.camera.position.clone().sub(this.controls.target)
     if (offset.lengthSq() === 0) offset.set(0, 0, 1)
-    offset.setLength(
-      THREE.MathUtils.clamp(
-        distance,
-        this.controls.minDistance,
-        this.controls.maxDistance,
-      ),
-    )
-    this.camera.position.copy(this.controls.target).add(offset)
+    offset.setLength(THREE.MathUtils.clamp(distance, this.controls.minDistance, this.controls.maxDistance))
+    this.moveCamera(() => ({ target: this.controls.target.clone(), offset }), 220)
+  }
+
+  private interruptCameraMotion = (): void => {
+    this.cameraMotion.cancel()
+    this.controls.enableDamping = true
+  }
+
+  setTransitionOptions(options: TransitionOptions): void {
+    this.transitionOptions = {
+      algorithm: options.algorithm ?? 'bezier',
+      chaikinIterations: options.chaikinIterations ?? 3,
+    }
+  }
+
+  private moveCamera(destination: Parameters<CameraMotion['move']>[0], duration: number, immediate = false): void {
+    // 清除 OrbitControls 的惯性，避免程序动画与用户旋转同时修改相机。
+    const position = this.camera.position.clone()
+    const target = this.controls.target.clone()
+    this.controls.enableDamping = false
     this.controls.update()
+    this.camera.position.copy(position)
+    this.controls.target.copy(target)
+    this.cameraMotion.move(destination, {
+      ...this.transitionOptions,
+      duration, curve: this.cameraCurve,
+      immediate: immediate || this.reducedMotion.matches,
+    })
   }
 
   /** 语言切换后刷新所有 3D 场景中已创建的文本标签（天体名、地标名、探测器名） */
@@ -550,16 +713,12 @@ export class SceneManager {
           1.2,
       ),
     )
-    this.controls.target.copy(target)
-    this.camera.position
-      .copy(target)
-      .add(new THREE.Vector3(0, 0.25, 1).setLength(distance))
     this.focusedLandmarkId = null
     this.focusedWorldPosition = null
     this.focusedBodyWorldPosition = null
     this.isSystemView = true
     this.updateLunarFeatureVisibility()
-    this.controls.update()
+    this.moveCamera(() => ({ target, offset: new THREE.Vector3(0, 0.25, 1).setLength(distance) }), 1000)
     return distance
   }
 
@@ -583,13 +742,37 @@ export class SceneManager {
       this.updateSunlightDirection()
       this.updateLandmarkLabels()
       this.updateLunarOrbiterLabels()
-      if (this.focusedWorldPosition) this.followFocusedLandmark()
-      else this.followFocusedBody()
+      const cameraAnimating = this.motion.has('camera')
+      if (!cameraAnimating) {
+        if (this.focusedWorldPosition) this.followFocusedLandmark()
+        else this.followFocusedBody()
+      }
+      this.motion.update(performance.now())
+      if (cameraAnimating) {
+        // 保持跟随基准同步，动画结束后的第一帧不会跳回旧位置。
+        if (this.currentModel && this.focusedBodyWorldPosition) {
+          this.currentModel.getWorldPosition(this.focusedBodyWorldPosition)
+        }
+        if (this.currentModel && this.focusedWorldPosition && this.focusedLandmarkId) {
+          const entry = this.landmarkLabels.find(({ landmark }) => landmark.id === this.focusedLandmarkId)
+          if (entry) this.focusedWorldPosition.copy(entry.localPosition).applyMatrix4(this.currentModel.matrixWorld)
+        }
+      }
+      this.controls.enableDamping = !this.motion.has('camera')
       this.controls.update()
+      this.camera.updateMatrixWorld()
+      this.updateLocationMarkerViewport()
       this.renderer.render(this.scene, this.camera)
       this.cssRenderer.render(this.scene, this.camera)
     }
     animate()
+  }
+
+  private updateLocationMarkerViewport(): void {
+    this.locationPulseMaterial?.uniforms.uViewport.value.set(
+      Math.max(this.container.clientWidth, 1),
+      Math.max(this.container.clientHeight, 1),
+    )
   }
 
   private updateSunlightDirection(): void {
@@ -1276,7 +1459,7 @@ export class SceneManager {
         ? this.bodyAnchors.get(body.primaryId)
         : this.scene
       if (parent) {
-        this.addOrbitLine(orbitRadius, parent)
+        this.addOrbitLine(orbitRadius, parent, new THREE.Vector3(), body.orbitalEccentricity ?? 0)
       }
     }
   }
@@ -1285,24 +1468,26 @@ export class SceneManager {
     radius: number,
     parent: THREE.Object3D,
     center = new THREE.Vector3(),
+    eccentricity = 0,
   ): THREE.LineLoop {
     const points: THREE.Vector3[] = []
-    for (let i = 0; i < 128; i += 1) {
-      const angle = (i / 128) * Math.PI * 2
+    for (let i = 0; i < 512; i += 1) {
+      const angle = (i / 512) * Math.PI * 2
+      const point = orbitPoint(radius, eccentricity, angle)
       points.push(
         new THREE.Vector3(
-          center.x + Math.cos(angle) * radius,
+          center.x + point.x,
           center.y,
-          center.z + Math.sin(angle) * radius,
+          center.z + point.z,
         ),
       )
     }
     const line = new THREE.LineLoop(
       new THREE.BufferGeometry().setFromPoints(points),
       new THREE.LineBasicMaterial({
-        color: 0x47658c,
+        color: 0x719ac2,
         transparent: true,
-        opacity: 0.45,
+        opacity: 0.6,
       }),
     )
     line.visible = this.auxiliaryLinesVisible
@@ -1312,7 +1497,10 @@ export class SceneManager {
   }
 
   private updateLandmarkLabels(): void {
-    if (!this.currentModel || this.activeBodyId !== 'moon') return
+    if (!this.currentModel || this.activeBodyId !== 'moon') {
+      for (const { label } of this.landmarkLabels) label.visible = false
+      return
+    }
     this.currentModel.updateMatrixWorld(true)
 
     for (const { label, localPosition } of this.landmarkLabels) {
@@ -1323,14 +1511,13 @@ export class SceneManager {
         .clone()
         .applyMatrix4(this.currentModel.matrixWorld)
       const towardCamera = this.camera.position.clone().sub(worldPosition).normalize()
-      label.element.style.display = normal.dot(towardCamera) > 0.08 ? 'flex' : 'none'
+      label.visible = normal.dot(towardCamera) > 0.08
     }
   }
 
   private updateLunarOrbiterLabels(): void {
     for (const label of this.lunarOrbiterLabels) {
-      label.element.style.display =
-        this.activeBodyId === 'moon' || this.isSystemView ? 'block' : 'none'
+      label.visible = this.activeBodyId === 'moon' || this.isSystemView
     }
   }
 
@@ -1382,10 +1569,12 @@ export class SceneManager {
       ),
     )
 
-    this.controls.target.copy(target)
-    this.camera.position.copy(target).add(offset)
     this.focusedWorldPosition = target
-    this.controls.update()
+    const model = this.currentModel
+    this.moveCamera(() => {
+      model.updateWorldMatrix(true, false)
+      return { target: entry.localPosition.clone().applyMatrix4(model.matrixWorld), offset }
+    }, 850)
   }
 
   private followFocusedLandmark(): void {
@@ -1414,6 +1603,8 @@ export class SceneManager {
   }
 
   private clearSystem(): void {
+    this.cameraMotion.cancel()
+    this.motion.clear()
     this.clearSurfaceLocationMarker()
     this.removeLunarOrbiters()
     for (const model of this.bodyModels.values()) {
@@ -1438,6 +1629,7 @@ export class SceneManager {
     this.bodyDiameters.clear()
     this.bodyRotationPeriods.clear()
     this.bodyOrbitalPeriods.clear()
+    this.bodyOrbits.clear()
     this.tidallyLockedBodies.clear()
     this.bodyReplacementSequences.clear()
     this.orbitLines = []
@@ -1461,6 +1653,8 @@ export class SceneManager {
     this.clearSystem()
     this.starfield.dispose()
     this.axes.dispose()
+    this.renderer.domElement.removeEventListener('pointerdown', this.interruptCameraMotion)
+    this.renderer.domElement.removeEventListener('wheel', this.interruptCameraMotion)
     this.controls.dispose()
     this.renderer.dispose()
     if (this.renderer.domElement.parentNode) {

@@ -27,6 +27,9 @@ export const useUniverseStore = defineStore('universe', () => {
   const surfaceLocation = ref<{ latitude: number; longitude: number } | null>(
     null,
   )
+  const isLocating = ref(false)
+  const locationMessage = ref<{ key: string; params?: Record<string, string> }>({ key: '' })
+  const locationFocusKey = ref(0)
   const viewResetKey = ref(0)
   const selectedLandmark = computed(
     () => lunarLandmarks.find(({ id }) => id === selectedLandmarkId.value) ?? null,
@@ -63,7 +66,9 @@ export const useUniverseStore = defineStore('universe', () => {
     const body = bodyRegistry.bodies[bodyId]
     if (!body) return
     currentBodyId.value = bodyId
-    currentVariantId.value = variantId ?? body.defaultVariantId
+    currentVariantId.value = body.variants.some(({ id }) => id === variantId)
+      ? variantId!
+      : body.defaultVariantId
     if (bodyId !== 'moon') selectedLandmarkId.value = null
   }
 
@@ -101,6 +106,46 @@ export const useUniverseStore = defineStore('universe', () => {
     loadingMessage.value = { key: 'loading.initScene' }
   }
 
+  function locateCurrentPosition(): void {
+    if (isLocating.value) return
+    locationMessage.value = { key: '' }
+    if (!window.isSecureContext) {
+      locationMessage.value = { key: 'controls.locateNeedsHttps' }
+      return
+    }
+    if (!navigator.geolocation) {
+      locationMessage.value = { key: 'controls.locateUnsupported' }
+      return
+    }
+
+    isLocating.value = true
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        surfaceLocation.value = {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        }
+        locationMessage.value = {
+          key: 'controls.locateSuccess',
+          params: { lat: coords.latitude.toFixed(4), lng: coords.longitude.toFixed(4) },
+        }
+        isLocating.value = false
+        locationFocusKey.value += 1
+      },
+      (error) => {
+        locationMessage.value = {
+          key: error.code === error.PERMISSION_DENIED
+            ? 'controls.locateDenied'
+            : error.code === error.TIMEOUT
+              ? 'controls.locateTimeout'
+              : 'controls.locateFailed',
+        }
+        isLocating.value = false
+      },
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
+    )
+  }
+
   function resetView() {
     cameraDistance.value = 45.7
     simulationDay.value = simulationStartDay
@@ -126,6 +171,10 @@ export const useUniverseStore = defineStore('universe', () => {
     auxiliaryLinesVisible,
     isZenMode,
     surfaceLocation,
+    isLocating,
+    locationMessage,
+    locationFocusKey,
+    locateCurrentPosition,
     viewResetKey,
     sceneReady,
     modelLoading,

@@ -12,6 +12,8 @@ export const earth: CelestialBody = {
   visualDistanceFromSun: 0,
   visualDistanceFromPrimary: 50,
   orbitalPeriodDays: 365.256,
+  // NASA Earth Fact Sheet: https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html
+  orbitalEccentricity: 0.0167,
   rotationPeriodDays: 0.99727,
   variants: [
     {

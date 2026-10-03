@@ -22,6 +22,10 @@ const messages = {
     defaultSource: '太阳、地球与月球同场景展示；轨道距离与模型大小为教学示意比例',
   },
   controls: {
+    orbitDemo: '公转演示',
+    daysPerSecond: '{days} 天 / 秒',
+    hoursPerSecond: '{hours} 小时 / 秒',
+
     zenExit: '退出禅模式',
     bodyInfo: '天体信息',
     darkSideBrightness: '暗部亮度',

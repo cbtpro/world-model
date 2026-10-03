@@ -35,12 +35,14 @@ export interface CelestialBody {
   primaryId?: string
   /** 教学示意场景中的模型直径；轨道与天体大小均为示意比例 */
   visualDiameter?: number
-  /** 教学示意场景中相对太阳的轨道半径 */
+  /** 教学示意场景中相对太阳的轨道半长轴 */
   visualDistanceFromSun?: number
-  /** 教学示意场景中相对主天体的轨道半径 */
+  /** 教学示意场景中相对主天体的轨道半长轴 */
   visualDistanceFromPrimary?: number
   /** 公转周期（地球日） */
   orbitalPeriodDays?: number
+  /** 椭圆轨道离心率，范围 [0, 1)，默认 0 */
+  orbitalEccentricity?: number
   /** 是否被主天体潮汐锁定；自转随主天体方向，不单独旋转 */
   tidallyLockedToPrimary?: boolean
 }

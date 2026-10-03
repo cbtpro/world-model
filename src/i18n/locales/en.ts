@@ -24,6 +24,10 @@ const messages: MessageSchema = {
     defaultSource: 'Sun, Earth, and Moon shown together; orbital distances and model sizes are illustrative, not to scale',
   },
   controls: {
+    orbitDemo: 'Orbit demo',
+    daysPerSecond: '{days} days / second',
+    hoursPerSecond: '{hours} hours / second',
+
     zenExit: 'Exit zen mode',
     bodyInfo: 'Body Information',
     darkSideBrightness: 'Dark-side Brightness',

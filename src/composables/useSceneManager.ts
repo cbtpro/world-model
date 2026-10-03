@@ -1,16 +1,18 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useUniverseStore } from '@/stores/universe'
 import { SceneManager, type SceneBodyModel } from '@/three/SceneManager'
 import { bodyRegistry } from '@/config/bodies'
+import type { TransitionOptions } from '@/animation/paths'
 
-const SECONDS_PER_DAY = 86_400
+import { advanceSimulationDay } from '@/config/simulation'
 
-export function useSceneManager() {
+export function useSceneManager(getTransitionOptions: () => TransitionOptions = () => ({})) {
   const containerRef = ref<HTMLElement | null>(null)
   const store = useUniverseStore()
   const route = useRoute()
+  const router = useRouter()
   const { t, locale } = useI18n()
 
   let sceneManager: SceneManager | null = null
@@ -31,9 +33,8 @@ export function useSceneManager() {
 
   function animateTime(timestamp: number): void {
     if (previousFrameTime !== null && store.isTimePlaying && !loadingPromise) {
-      const elapsedSeconds = (timestamp - previousFrameTime) / 1000
-      store.simulationDay +=
-        (elapsedSeconds * store.simulationSpeed) / SECONDS_PER_DAY
+      const elapsedSeconds = Math.min(0.25, (timestamp - previousFrameTime) / 1000)
+      store.simulationDay = advanceSimulationDay(store.simulationDay, elapsedSeconds, store.simulationSpeed)
     }
     previousFrameTime = timestamp
     animationFrameId = requestAnimationFrame(animateTime)
@@ -55,6 +56,7 @@ export function useSceneManager() {
       primaryId: body.primaryId,
       rotationPeriodDays: body.rotationPeriodDays ?? 1,
       orbitalPeriodDays: body.orbitalPeriodDays ?? 0,
+      orbitalEccentricity: body.orbitalEccentricity ?? 0,
       tidallyLockedToPrimary: body.tidallyLockedToPrimary,
       includeLunarLandmarks: body.id === 'moon',
     }
@@ -68,6 +70,7 @@ export function useSceneManager() {
     if (!containerRef.value) return
     store.setScenePhase()
     sceneManager = new SceneManager(containerRef.value)
+    sceneManager.setTransitionOptions(getTransitionOptions())
     sceneManager.setDarkSideBrightness(store.darkSideBrightness)
     sceneManager.init()
     sceneManager.setAuxiliaryLinesVisible(store.auxiliaryLinesVisible)
@@ -90,11 +93,12 @@ export function useSceneManager() {
       .then(() => {
         if (!sceneManager) return
         sceneManager.setSimulationTime(store.simulationDay)
-        store.cameraDistance = sceneManager.setActiveBody(store.currentBodyId)
+        store.cameraDistance = sceneManager.setActiveBody(store.currentBodyId, true)
         sceneManager.setSurfaceLocation(store.surfaceLocation)
         sceneManager.setFocusedLandmark(store.selectedLandmarkId)
         updateSelectedCoordinates()
         store.isTimePlaying = true
+        store.locateCurrentPosition()
       })
       .catch((err) => {
         console.error('天体场景加载失败:', err)
@@ -158,6 +162,21 @@ export function useSceneManager() {
   )
 
   watch(
+    () => store.locationFocusKey,
+    async () => {
+      if (loadingPromise) await loadingPromise
+      if (!sceneManager) return
+      store.isZenMode = false
+      await router.push({ name: 'body', params: { bodyId: 'earth' } })
+      await navigateToSelection()
+      if (!sceneManager || store.currentBodyId !== 'earth') return
+      sceneManager.setSurfaceLocation(store.surfaceLocation)
+      const distance = sceneManager.focusSurfaceLocation()
+      if (distance !== null) store.cameraDistance = distance
+    },
+  )
+
+  watch(
     () => store.viewResetKey,
     () => {
       const distance = sceneManager?.resetView()
@@ -171,6 +190,7 @@ export function useSceneManager() {
   )
 
   watch(locale, () => sceneManager?.refreshLocaleLabels())
+  watch(getTransitionOptions, (options) => sceneManager?.setTransitionOptions(options), { deep: true })
 
   async function navigateToSelection(): Promise<void> {
     const sequence = ++navigationSequence

@@ -24,6 +24,10 @@ const messages: MessageSchema = {
     defaultSource: 'Солнце, Земля и Луна показаны в одной сцене; расстояния и размеры моделей приведены в учебном, не реальном масштабе',
   },
   controls: {
+    orbitDemo: 'Демонстрация орбиты',
+    daysPerSecond: '{days} дней / секунду',
+    hoursPerSecond: '{hours} часов / секунду',
+
     zenExit: 'Выйти из дзен-режима',
     bodyInfo: 'Информация о теле',
     darkSideBrightness: 'Яркость тёмной стороны',

@@ -1,79 +1,70 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
-import { useRouter } from 'vue-router'
 import { useUniverseStore } from '@/stores/universe'
 import BodySelector from '@/components/BodySelector.vue'
 import LandmarkNavigator from '@/components/LandmarkNavigator.vue'
 import VariantSelector from '@/components/VariantSelector.vue'
+import { SECONDS_PER_DAY, MAX_SIMULATION_SPEED, ORBIT_DEMO_SPEED, SPEED_PRESETS } from '@/config/simulation'
 
 const store = useUniverseStore()
-const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const panel = ref<HTMLElement | null>(null)
+let languageAnimation: Animation | null = null
+watch(locale, () => {
+  languageAnimation?.cancel()
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    languageAnimation = panel.value?.animate(
+      [{ opacity: 0.55 }, { opacity: 1 }],
+      { duration: 220, easing: 'cubic-bezier(0.42, 0, 0.2, 1)' },
+    ) ?? null
+  }
+}, { flush: 'post' })
+onUnmounted(() => languageAnimation?.cancel())
 const isCollapsed = ref(false)
-const isLocating = ref(false)
-const locationMessage = ref('')
+const speedExponent = computed({
+  get: () => Math.log10(Math.max(0.1, store.simulationSpeed)),
+  set: (value: number) => { store.simulationSpeed = Math.min(MAX_SIMULATION_SPEED, Math.round(10 ** value * 10) / 10) },
+})
+const formatNumber = (value: number) => new Intl.NumberFormat(locale.value, { maximumFractionDigits: 1 }).format(value)
+const speedLabel = (speed: number) => speed === ORBIT_DEMO_SPEED
+  ? t('controls.orbitDemo')
+  : speed >= SECONDS_PER_DAY
+    ? t('controls.daysPerSecond', { days: formatNumber(speed / SECONDS_PER_DAY) })
+    : speed >= 3600
+      ? t('controls.hoursPerSecond', { hours: formatNumber(speed / 3600) })
+      : t('controls.speedUnit', { speed: formatNumber(speed) })
+function setSpeed(speed: number): void {
+  store.simulationSpeed = speed
+  store.isTimePlaying = true
+}
 const dayToDate = (day: number) =>
   new Date(day * 86_400_000).toISOString().replace('T', ' ').slice(0, 16)
 const simulationDate = computed(() => {
   return `${dayToDate(store.simulationDay)} UTC`
 })
+const timelineCenter = computed(() => store.simulationStartDay +
+  Math.floor((store.simulationDay - store.simulationStartDay) / 365.25) * 365.25)
 const startDate = computed(() =>
-  dayToDate(store.simulationStartDay - 365.25).slice(0, 10),
+  dayToDate(timelineCenter.value - 365.25).slice(0, 10),
 )
 const endDate = computed(() =>
-  dayToDate(store.simulationStartDay + 365.25).slice(0, 10),
+  dayToDate(timelineCenter.value + 365.25).slice(0, 10),
 )
 
 function changeZoom(amount: number) {
   store.cameraDistance = Math.min(
-    300,
+    600,
     Math.max(1, store.cameraDistance + amount),
   )
 }
 
-function locateCurrentPosition(): void {
-  locationMessage.value = ''
-  if (!window.isSecureContext) {
-    locationMessage.value = t('controls.locateNeedsHttps')
-    return
-  }
-  if (!navigator.geolocation) {
-    locationMessage.value = t('controls.locateUnsupported')
-    return
-  }
-
-  isLocating.value = true
-  navigator.geolocation.getCurrentPosition(
-    ({ coords }) => {
-      store.surfaceLocation = {
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-      }
-      locationMessage.value = t('controls.locateSuccess', {
-        lat: coords.latitude.toFixed(4),
-        lng: coords.longitude.toFixed(4),
-      })
-      isLocating.value = false
-      void router.push({ name: 'body', params: { bodyId: 'earth' } })
-    },
-    (error) => {
-      locationMessage.value =
-        error.code === error.PERMISSION_DENIED
-          ? t('controls.locateDenied')
-          : error.code === error.TIMEOUT
-            ? t('controls.locateTimeout')
-            : t('controls.locateFailed')
-      isLocating.value = false
-    },
-    { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
-  )
-}
 </script>
 
 <template>
   <section
+    ref="panel"
     class="scene-controls"
     :class="{ collapsed: isCollapsed }"
     :aria-label="t('controls.panelLabel')"
@@ -110,7 +101,8 @@ function locateCurrentPosition(): void {
       </div>
     </header>
 
-    <div v-show="!isCollapsed" class="controls-content">
+    <div class="controls-reveal" :class="{ closed: isCollapsed }" :inert="isCollapsed">
+    <div class="controls-content">
       <div class="selection-controls">
         <LanguageSwitcher />
         <BodySelector />
@@ -156,7 +148,7 @@ function locateCurrentPosition(): void {
             v-model.number="store.cameraDistance"
             type="range"
             min="1"
-            max="300"
+            max="600"
             step="1"
           >
           <button type="button" :aria-label="t('controls.zoomOutAria')" @click="changeZoom(10)">+</button>
@@ -191,8 +183,8 @@ function locateCurrentPosition(): void {
               id="simulation-time"
               v-model.number="store.simulationDay"
               type="range"
-              :min="store.simulationStartDay - 365.25"
-              :max="store.simulationStartDay + 365.25"
+              :min="timelineCenter - 365.25"
+              :max="timelineCenter + 365.25"
               step="0.00001"
               :aria-label="t('controls.timelineAria')"
               @input="store.isTimePlaying = false"
@@ -206,16 +198,24 @@ function locateCurrentPosition(): void {
           <div class="control-row">
             <div class="speed-label">
               <label for="simulation-speed">{{ t('controls.speed') }}</label>
-              <output>{{ t('controls.speedUnit', { speed: store.simulationSpeed }) }}</output>
+              <output>{{ speedLabel(store.simulationSpeed) }}</output>
             </div>
             <input
               id="simulation-speed"
-              v-model.number="store.simulationSpeed"
+              v-model.number="speedExponent"
               type="range"
-              min="0.1"
-              max="1000"
-              step="0.1"
+              min="-1"
+              :max="Math.log10(MAX_SIMULATION_SPEED)"
+              step="0.01"
             >
+          </div>
+          <p class="simulation-rate">{{ store.simulationSpeed >= SECONDS_PER_DAY
+            ? t('controls.daysPerSecond', { days: formatNumber(store.simulationSpeed / SECONDS_PER_DAY) })
+            : t('controls.speedUnit', { speed: formatNumber(store.simulationSpeed) }) }}</p>
+          <div class="speed-presets">
+            <button v-for="speed in SPEED_PRESETS" :key="speed" type="button"
+              class="action-button" :aria-pressed="store.simulationSpeed === speed"
+              @click="setSpeed(speed)">{{ speedLabel(speed) }}</button>
           </div>
           <button
             type="button"
@@ -255,13 +255,13 @@ function locateCurrentPosition(): void {
             <button
               type="button"
               class="action-button location-button"
-              :disabled="isLocating"
-              @click="locateCurrentPosition"
+              :disabled="store.isLocating"
+              @click="store.locateCurrentPosition"
             >
-              {{ isLocating ? t('controls.locating') : t('controls.locateButton') }}
+              {{ store.isLocating ? t('controls.locating') : t('controls.locateButton') }}
             </button>
-            <p v-if="locationMessage" class="location-message" aria-live="polite">
-              {{ locationMessage }}
+            <p v-if="store.locationMessage.key" class="location-message" aria-live="polite">
+              {{ t(store.locationMessage.key, store.locationMessage.params ?? {}) }}
             </p>
           </div>
         </div>
@@ -274,10 +274,25 @@ function locateCurrentPosition(): void {
         </div>
       </details>
     </div>
+    </div>
   </section>
 </template>
 
 <style scoped>
+.speed-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+.speed-presets [aria-pressed='true'] {
+  background: var(--color-accent-dim);
+  border-color: var(--color-accent);
+}
+.simulation-rate {
+  color: var(--color-text-dim);
+  font-size: 11px;
+}
+
 .scene-controls {
   width: min(320px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
@@ -358,6 +373,23 @@ h2 {
 .collapse-button:hover {
   color: var(--color-text);
   background: var(--color-accent-dim);
+}
+
+.controls-reveal {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition: grid-template-rows 280ms cubic-bezier(0.42, 0, 0.2, 1), opacity 220ms ease;
+}
+
+.controls-reveal.closed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.controls-reveal > .controls-content {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .controls-content {

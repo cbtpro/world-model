@@ -24,6 +24,10 @@ const messages: MessageSchema = {
     defaultSource: '太陽、地球與月球同場景展示；軌道距離與模型大小為教學示意比例',
   },
   controls: {
+    orbitDemo: '公轉演示',
+    daysPerSecond: '{days} 天 / 秒',
+    hoursPerSecond: '{hours} 小時 / 秒',
+
     zenExit: '退出禪模式',
     bodyInfo: '天體資訊',
     darkSideBrightness: '暗部亮度',
