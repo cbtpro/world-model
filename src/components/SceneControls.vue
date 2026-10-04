@@ -6,6 +6,8 @@ import { useUniverseStore } from '@/stores/universe'
 import BodySelector from '@/components/BodySelector.vue'
 import LandmarkNavigator from '@/components/LandmarkNavigator.vue'
 import VariantSelector from '@/components/VariantSelector.vue'
+import SimulationPanel from '@/components/SimulationPanel.vue'
+import '@/styles/control-sections.css'
 import { SECONDS_PER_DAY, MAX_SIMULATION_SPEED, ORBIT_DEMO_SPEED, SPEED_PRESETS } from '@/config/simulation'
 
 const store = useUniverseStore()
@@ -267,6 +269,8 @@ function changeZoom(amount: number) {
         </div>
       </details>
 
+      <SimulationPanel v-if="store.currentBodyId === 'earth'" />
+
       <details v-if="store.currentBodyId === 'moon'" class="control-section landmark-section">
         <summary>{{ t('controls.lunarSites') }}</summary>
         <div class="control-section-content">
@@ -454,42 +458,6 @@ h2 {
 .time-header > div {
   display: grid;
   gap: 4px;
-}
-
-.control-section {
-  margin-top: 9px;
-  border-bottom: 1px solid rgba(80, 120, 200, 0.22);
-}
-
-.control-section > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 32px;
-  color: var(--color-text-dim);
-  font-size: 11px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.control-section > summary::-webkit-details-marker {
-  display: none;
-}
-
-.control-section > summary::after {
-  content: '+';
-  color: var(--color-accent);
-  font-size: 16px;
-}
-
-.control-section[open] > summary::after {
-  content: '−';
-}
-
-.control-section-content {
-  display: grid;
-  gap: 6px;
-  padding: 1px 0 8px;
 }
 
 .control-section-content .control-row {

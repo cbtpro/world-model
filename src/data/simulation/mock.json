@@ -1,0 +1,163 @@
+{
+  "isMock": true,
+  "network": {
+    "nodes": [
+      {
+        "id": "shanghai",
+        "name": "Shanghai",
+        "latitude": 31.23,
+        "longitude": 121.47,
+        "role": "primary"
+      },
+      {
+        "id": "singapore",
+        "name": "Singapore",
+        "latitude": 1.35,
+        "longitude": 103.82,
+        "role": "replica"
+      },
+      {
+        "id": "frankfurt",
+        "name": "Frankfurt",
+        "latitude": 50.11,
+        "longitude": 8.68,
+        "role": "primary"
+      },
+      {
+        "id": "london",
+        "name": "London",
+        "latitude": 51.51,
+        "longitude": -0.13,
+        "role": "replica"
+      },
+      {
+        "id": "virginia",
+        "name": "Virginia",
+        "latitude": 38.91,
+        "longitude": -77.04,
+        "role": "primary"
+      },
+      {
+        "id": "oregon",
+        "name": "Oregon",
+        "latitude": 45.52,
+        "longitude": -122.68,
+        "role": "replica"
+      }
+    ],
+    "routes": [
+      {
+        "id": "dr-asia",
+        "from": "shanghai",
+        "to": "singapore",
+        "label": "APAC DR",
+        "latencyMs": 68,
+        "durationSeconds": 8
+      },
+      {
+        "id": "dr-europe",
+        "from": "frankfurt",
+        "to": "london",
+        "label": "Europe DR",
+        "latencyMs": 21,
+        "durationSeconds": 6
+      },
+      {
+        "id": "dr-us",
+        "from": "virginia",
+        "to": "oregon",
+        "label": "US DR",
+        "latencyMs": 76,
+        "durationSeconds": 9
+      },
+      {
+        "id": "backbone-1",
+        "from": "shanghai",
+        "to": "frankfurt",
+        "label": "Global replication",
+        "latencyMs": 182,
+        "durationSeconds": 12
+      },
+      {
+        "id": "backbone-2",
+        "from": "frankfurt",
+        "to": "virginia",
+        "label": "Global replication",
+        "latencyMs": 94,
+        "durationSeconds": 10
+      }
+    ]
+  },
+  "flights": {
+    "nodes": [
+      {
+        "id": "PVG",
+        "name": "Shanghai",
+        "latitude": 31.14,
+        "longitude": 121.81,
+        "role": "airport"
+      },
+      {
+        "id": "SFO",
+        "name": "San Francisco",
+        "latitude": 37.62,
+        "longitude": -122.38,
+        "role": "airport"
+      },
+      {
+        "id": "LHR",
+        "name": "London",
+        "latitude": 51.47,
+        "longitude": -0.45,
+        "role": "airport"
+      },
+      {
+        "id": "JFK",
+        "name": "New York",
+        "latitude": 40.64,
+        "longitude": -73.78,
+        "role": "airport"
+      },
+      {
+        "id": "SIN",
+        "name": "Singapore",
+        "latitude": 1.36,
+        "longitude": 103.99,
+        "role": "airport"
+      },
+      {
+        "id": "SYD",
+        "name": "Sydney",
+        "latitude": -33.94,
+        "longitude": 151.18,
+        "role": "airport"
+      }
+    ],
+    "routes": [
+      {
+        "id": "flight-1",
+        "from": "PVG",
+        "to": "SFO",
+        "label": "MOCK 101",
+        "latencyMs": 0,
+        "durationSeconds": 24
+      },
+      {
+        "id": "flight-2",
+        "from": "LHR",
+        "to": "JFK",
+        "label": "MOCK 202",
+        "latencyMs": 0,
+        "durationSeconds": 18
+      },
+      {
+        "id": "flight-3",
+        "from": "SIN",
+        "to": "SYD",
+        "label": "MOCK 303",
+        "latencyMs": 0,
+        "durationSeconds": 20
+      }
+    ]
+  }
+}

@@ -1,0 +1,242 @@
+{
+  "version": 1,
+  "software": "Atlas Workspace",
+  "period": "2026-10-04",
+  "isMock": true,
+  "regions": [
+    {
+      "id": "beijing",
+      "city": "Beijing",
+      "country": "China",
+      "latitude": 39.9,
+      "longitude": 116.4,
+      "activeUsers": 94000,
+      "sessions": 188000
+    },
+    {
+      "id": "shenzhen",
+      "city": "Shenzhen",
+      "country": "China",
+      "latitude": 22.54,
+      "longitude": 114.06,
+      "activeUsers": 126000,
+      "sessions": 378000
+    },
+    {
+      "id": "tokyo",
+      "city": "Tokyo",
+      "country": "Japan",
+      "latitude": 35.68,
+      "longitude": 139.69,
+      "activeUsers": 82000,
+      "sessions": 328000
+    },
+    {
+      "id": "seoul",
+      "city": "Seoul",
+      "country": "South Korea",
+      "latitude": 37.57,
+      "longitude": 126.98,
+      "activeUsers": 41000,
+      "sessions": 205000
+    },
+    {
+      "id": "singapore",
+      "city": "Singapore",
+      "country": "Singapore",
+      "latitude": 1.35,
+      "longitude": 103.82,
+      "activeUsers": 56000,
+      "sessions": 112000
+    },
+    {
+      "id": "mumbai",
+      "city": "Mumbai",
+      "country": "India",
+      "latitude": 19.08,
+      "longitude": 72.88,
+      "activeUsers": 79000,
+      "sessions": 237000
+    },
+    {
+      "id": "bengaluru",
+      "city": "Bengaluru",
+      "country": "India",
+      "latitude": 12.97,
+      "longitude": 77.59,
+      "activeUsers": 108000,
+      "sessions": 432000
+    },
+    {
+      "id": "dubai",
+      "city": "Dubai",
+      "country": "UAE",
+      "latitude": 25.2,
+      "longitude": 55.27,
+      "activeUsers": 27000,
+      "sessions": 135000
+    },
+    {
+      "id": "tel-aviv",
+      "city": "Tel Aviv",
+      "country": "Israel",
+      "latitude": 32.09,
+      "longitude": 34.78,
+      "activeUsers": 21000,
+      "sessions": 42000
+    },
+    {
+      "id": "london",
+      "city": "London",
+      "country": "UK",
+      "latitude": 51.51,
+      "longitude": -0.13,
+      "activeUsers": 87000,
+      "sessions": 261000
+    },
+    {
+      "id": "paris",
+      "city": "Paris",
+      "country": "France",
+      "latitude": 48.86,
+      "longitude": 2.35,
+      "activeUsers": 51000,
+      "sessions": 204000
+    },
+    {
+      "id": "berlin",
+      "city": "Berlin",
+      "country": "Germany",
+      "latitude": 52.52,
+      "longitude": 13.41,
+      "activeUsers": 64000,
+      "sessions": 320000
+    },
+    {
+      "id": "stockholm",
+      "city": "Stockholm",
+      "country": "Sweden",
+      "latitude": 59.33,
+      "longitude": 18.07,
+      "activeUsers": 22000,
+      "sessions": 44000
+    },
+    {
+      "id": "san-francisco",
+      "city": "San Francisco",
+      "country": "USA",
+      "latitude": 37.77,
+      "longitude": -122.42,
+      "activeUsers": 132000,
+      "sessions": 396000
+    },
+    {
+      "id": "new-york",
+      "city": "New York",
+      "country": "USA",
+      "latitude": 40.71,
+      "longitude": -74.01,
+      "activeUsers": 98000,
+      "sessions": 392000
+    },
+    {
+      "id": "toronto",
+      "city": "Toronto",
+      "country": "Canada",
+      "latitude": 43.65,
+      "longitude": -79.38,
+      "activeUsers": 49000,
+      "sessions": 245000
+    },
+    {
+      "id": "mexico-city",
+      "city": "Mexico City",
+      "country": "Mexico",
+      "latitude": 19.43,
+      "longitude": -99.13,
+      "activeUsers": 32000,
+      "sessions": 64000
+    },
+    {
+      "id": "sao-paulo",
+      "city": "São Paulo",
+      "country": "Brazil",
+      "latitude": -23.55,
+      "longitude": -46.63,
+      "activeUsers": 67000,
+      "sessions": 201000
+    },
+    {
+      "id": "buenos-aires",
+      "city": "Buenos Aires",
+      "country": "Argentina",
+      "latitude": -34.6,
+      "longitude": -58.38,
+      "activeUsers": 26000,
+      "sessions": 104000
+    },
+    {
+      "id": "santiago",
+      "city": "Santiago",
+      "country": "Chile",
+      "latitude": -33.45,
+      "longitude": -70.67,
+      "activeUsers": 18000,
+      "sessions": 90000
+    },
+    {
+      "id": "lagos",
+      "city": "Lagos",
+      "country": "Nigeria",
+      "latitude": 6.52,
+      "longitude": 3.38,
+      "activeUsers": 31000,
+      "sessions": 62000
+    },
+    {
+      "id": "nairobi",
+      "city": "Nairobi",
+      "country": "Kenya",
+      "latitude": -1.29,
+      "longitude": 36.82,
+      "activeUsers": 17000,
+      "sessions": 51000
+    },
+    {
+      "id": "cape-town",
+      "city": "Cape Town",
+      "country": "South Africa",
+      "latitude": -33.92,
+      "longitude": 18.42,
+      "activeUsers": 23000,
+      "sessions": 92000
+    },
+    {
+      "id": "cairo",
+      "city": "Cairo",
+      "country": "Egypt",
+      "latitude": 30.04,
+      "longitude": 31.24,
+      "activeUsers": 24000,
+      "sessions": 120000
+    },
+    {
+      "id": "sydney",
+      "city": "Sydney",
+      "country": "Australia",
+      "latitude": -33.87,
+      "longitude": 151.21,
+      "activeUsers": 46000,
+      "sessions": 92000
+    },
+    {
+      "id": "auckland",
+      "city": "Auckland",
+      "country": "New Zealand",
+      "latitude": -36.85,
+      "longitude": 174.76,
+      "activeUsers": 13000,
+      "sessions": 39000
+    }
+  ]
+}

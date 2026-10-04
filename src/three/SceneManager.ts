@@ -1,3 +1,5 @@
+import { GeoRoutesLayer } from './layers/GeoRoutesLayer'
+import type { SimulationDataset } from '@/data/simulation/schema'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
@@ -17,6 +19,8 @@ import { cubicBezier } from '@/animation/easing'
 import type { TransitionOptions } from '@/animation/paths'
 import { solarOverviewDistance } from '@/config/simulation'
 import { orbitPoint, solveEccentricAnomaly } from './orbits'
+import { SoftwareUsageLayer } from './layers/SoftwareUsageLayer'
+import type { SoftwareUsageDataset } from '@/data/softwareUsage/schema'
 
 const LANDMARK_SURFACE_OFFSET = 0.08
 
@@ -55,6 +59,18 @@ interface LunarOrbiterModel {
 // 场景管理器：封装 Three.js 渲染器/场景/相机/控制器/灯光/渲染循环
 // 命令式类，不使用 Vue 响应式包装（避免 Three 对象被 Proxy 代理导致性能损耗）
 export class SceneManager {
+  private networkLayer = new GeoRoutesLayer({ color: 0x66b5ff, aircraft: false })
+  private flightLayer = new GeoRoutesLayer({ color: 0x39d5ce, aircraft: true })
+  private simulationDataset: SimulationDataset | null = null
+  private networkVisible = false
+  private flightsVisible = false
+  private routesLastFrame: number | null = null
+  private usageLayer = new SoftwareUsageLayer()
+  private usageDataset: SoftwareUsageDataset | null = null
+  private usageVisible = false
+  private usageSelectionHandler: ((id: string) => void) | null = null
+  private usagePointerStart = new THREE.Vector2()
+  private usageRaycaster = new THREE.Raycaster()
   private motion = new Motion()
   private cameraMotion: CameraMotion
   private reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -142,6 +158,8 @@ export class SceneManager {
     this.controls.maxDistance = 600
     this.controls.rotateSpeed = 0.5
     this.renderer.domElement.addEventListener('pointerdown', this.interruptCameraMotion)
+    this.renderer.domElement.addEventListener('pointerdown', this.startUsagePick)
+    this.renderer.domElement.addEventListener('pointerup', this.pickUsageRegion)
     this.renderer.domElement.addEventListener('wheel', this.interruptCameraMotion, { passive: true })
 
     // 环境光只保留微弱填充光；太阳方向光负责实时昼夜明暗。
@@ -253,6 +271,8 @@ export class SceneManager {
     this.setSimulationTime(this.simulationDay)
     this.updateSunlightDirection()
     this.setSurfaceLocation(this.surfaceLocation)
+    this.setSoftwareUsage(this.usageDataset)
+    this.setSimulationData(this.simulationDataset)
     onProgress?.(100)
   }
 
@@ -281,7 +301,12 @@ export class SceneManager {
       return
     }
 
-    if (body.id === 'earth') this.clearSurfaceLocationMarker()
+    if (body.id === 'earth') {
+      this.clearSurfaceLocationMarker()
+      this.usageLayer.group.removeFromParent()
+      this.networkLayer.group.removeFromParent()
+      this.flightLayer.group.removeFromParent()
+    }
     anchor.remove(previous)
     this.modelLoader.dispose(previous)
     if (body.id === 'moon') {
@@ -308,7 +333,11 @@ export class SceneManager {
     model.visible = false
     this.fadeObject(`model-${body.id}`, model, true)
     this.setSimulationTime(this.simulationDay)
-    if (body.id === 'earth') this.setSurfaceLocation(this.surfaceLocation)
+    if (body.id === 'earth') {
+      this.setSurfaceLocation(this.surfaceLocation)
+      this.setSoftwareUsage(this.usageDataset)
+      this.setSimulationData(this.simulationDataset)
+    }
     if (this.activeBodyId === body.id) {
       this.currentModel = model
       model.updateMatrixWorld(true)
@@ -626,6 +655,75 @@ export class SceneManager {
     this.locationPulseMaterial = pulseMaterial
   }
 
+  setSimulationData(dataset: SimulationDataset | null): void {
+    this.simulationDataset = dataset
+    const earth = this.bodyModels.get('earth')
+    if (!earth) return
+    const radius = (this.bodyDiameters.get('earth') ?? 4) / 2
+    this.networkLayer.setData(dataset?.network ?? null, radius)
+    this.flightLayer.setData(dataset?.flights ?? null, radius)
+    earth.add(this.networkLayer.group, this.flightLayer.group)
+    this.setSimulationVisibility(this.networkVisible, this.flightsVisible)
+  }
+
+  setSimulationVisibility(network: boolean, flights: boolean): void {
+    this.networkVisible = network
+    this.flightsVisible = flights
+    this.networkLayer.group.visible = network && this.activeBodyId === 'earth'
+    this.flightLayer.group.visible = flights && this.activeBodyId === 'earth'
+  }
+
+  setSoftwareUsage(dataset: SoftwareUsageDataset | null): void {
+    this.usageDataset = dataset
+    const earth = this.bodyModels.get('earth')
+    if (!earth) return
+    this.usageLayer.group.removeFromParent()
+    this.usageLayer.setData(dataset, (this.bodyDiameters.get('earth') ?? 4) / 2)
+    earth.add(this.usageLayer.group)
+    this.usageLayer.group.visible = this.usageVisible && this.activeBodyId === 'earth'
+  }
+
+  setSoftwareUsageVisible(visible: boolean): void {
+    this.usageVisible = visible
+    this.usageLayer.group.visible = visible && this.activeBodyId === 'earth'
+  }
+
+  setUsageSelectionHandler(handler: (id: string) => void): void { this.usageSelectionHandler = handler }
+
+  focusUsageRegion(id: string): number | null {
+    const row = this.usageDataset?.regions.find(region => region.id === id)
+    const earth = this.bodyModels.get('earth')
+    if (!row || !earth || this.activeBodyId !== 'earth') return null
+    const lat = THREE.MathUtils.degToRad(row.latitude), lng = THREE.MathUtils.degToRad(row.longitude)
+    const normal = new THREE.Vector3(Math.cos(lat) * Math.sin(lng), Math.sin(lat), Math.cos(lat) * Math.cos(lng))
+    const distance = (this.bodyDiameters.get('earth') ?? 4) * 2
+    this.focusedLandmarkId = null
+    this.focusedWorldPosition = null
+    this.focusedBodyWorldPosition = earth.getWorldPosition(new THREE.Vector3())
+    this.moveCamera(() => {
+      earth.updateWorldMatrix(true, false)
+      return { target: earth.getWorldPosition(new THREE.Vector3()), offset: normal.clone().transformDirection(earth.matrixWorld).multiplyScalar(distance) }
+    }, 900)
+    return distance
+  }
+
+  private startUsagePick = (event: PointerEvent): void => {
+    this.usagePointerStart.set(event.clientX, event.clientY)
+  }
+
+  private pickUsageRegion = (event: PointerEvent): void => {
+    if (event.button !== 0 || this.activeBodyId !== 'earth' || !this.usageLayer.group.visible ||
+      this.usagePointerStart.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 5) return
+    const rect = this.renderer.domElement.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    this.usageRaycaster.setFromCamera(new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      1 - ((event.clientY - rect.top) / rect.height) * 2,
+    ), this.camera)
+    const id = this.usageLayer.pick(this.usageRaycaster)
+    if (id) this.usageSelectionHandler?.(id)
+  }
+
   focusSurfaceLocation(): number | null {
     const earth = this.bodyModels.get('earth')
     const marker = this.locationMarker
@@ -763,11 +861,17 @@ export class SceneManager {
   }
 
   private startRenderLoop(): void {
+    this.routesLastFrame = null
     const animate = () => {
       this.animationId = requestAnimationFrame(animate)
       if (this.locationPulseMaterial) {
         this.locationPulseMaterial.uniforms.uTime.value = performance.now() / 1000
       }
+      const now = performance.now()
+      const delta = this.routesLastFrame === null ? 0 : (now - this.routesLastFrame) / 1000
+      this.routesLastFrame = now
+      this.networkLayer.update(delta)
+      this.flightLayer.update(delta)
       this.updateSunlightDirection()
       this.updateLandmarkLabels()
       this.updateLunarOrbiterLabels()
@@ -1552,6 +1656,8 @@ export class SceneManager {
 
   private updateLunarFeatureVisibility(): void {
     const visible = this.activeBodyId === 'moon' || this.isSystemView
+    this.usageLayer.group.visible = this.usageVisible && this.activeBodyId === 'earth'
+    this.setSimulationVisibility(this.networkVisible, this.flightsVisible)
     if (this.lunarSurfaceFeatures) {
       this.lunarSurfaceFeatures.visible = visible
     }
@@ -1635,6 +1741,9 @@ export class SceneManager {
     this.cameraMotion.cancel()
     this.motion.clear()
     this.clearSurfaceLocationMarker()
+    this.usageLayer.dispose()
+    this.networkLayer.dispose()
+    this.flightLayer.dispose()
     this.removeLunarOrbiters()
     for (const model of this.bodyModels.values()) {
       model.parent?.remove(model)
@@ -1683,6 +1792,8 @@ export class SceneManager {
     this.starfield.dispose()
     this.axes.dispose()
     this.renderer.domElement.removeEventListener('pointerdown', this.interruptCameraMotion)
+    this.renderer.domElement.removeEventListener('pointerdown', this.startUsagePick)
+    this.renderer.domElement.removeEventListener('pointerup', this.pickUsageRegion)
     this.renderer.domElement.removeEventListener('wheel', this.interruptCameraMotion)
     this.controls.dispose()
     this.renderer.dispose()

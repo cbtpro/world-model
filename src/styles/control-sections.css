@@ -1,0 +1,36 @@
+.scene-controls .control-section {
+  margin-top: 9px;
+  border-bottom: 1px solid rgba(80, 120, 200, 0.22);
+}
+
+.scene-controls .control-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  color: var(--color-text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.scene-controls .control-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.scene-controls .control-section > summary::after {
+  content: '+';
+  color: var(--color-accent);
+  font-size: 16px;
+}
+
+.scene-controls .control-section[open] > summary::after {
+  content: '−';
+}
+
+.scene-controls .control-section-content {
+  display: grid;
+  gap: 6px;
+  padding: 1px 0 8px;
+}
+

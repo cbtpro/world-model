@@ -1,3 +1,4 @@
+import { useSimulationStore } from '@/stores/simulation'
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -8,10 +9,13 @@ import type { TransitionOptions } from '@/animation/paths'
 
 import { advanceSimulationDay } from '@/config/simulation'
 import { TimeRecovery } from '@/animation/TimeRecovery'
+import { useSoftwareUsageStore } from '@/stores/softwareUsage'
 
 export function useSceneManager(getTransitionOptions: () => TransitionOptions = () => ({})) {
   const containerRef = ref<HTMLElement | null>(null)
   const store = useUniverseStore()
+  const usage = useSoftwareUsageStore()
+  const simulation = useSimulationStore()
   const route = useRoute()
   const router = useRouter()
   const { t, locale } = useI18n()
@@ -140,6 +144,13 @@ export function useSceneManager(getTransitionOptions: () => TransitionOptions = 
     if (!containerRef.value) return
     store.setScenePhase()
     sceneManager = new SceneManager(containerRef.value)
+    sceneManager.setUsageSelectionHandler(id => { usage.selectedId = id })
+    sceneManager.setSoftwareUsage(usage.dataset)
+    sceneManager.setSoftwareUsageVisible(usage.visible)
+    void usage.load()
+    sceneManager.setSimulationData(simulation.dataset)
+    sceneManager.setSimulationVisibility(simulation.networkVisible, simulation.flightsVisible)
+    void simulation.load()
     sceneManager.setTransitionOptions(getTransitionOptions())
     sceneManager.setDarkSideBrightness(store.darkSideBrightness)
     sceneManager.init()
@@ -261,6 +272,16 @@ export function useSceneManager(getTransitionOptions: () => TransitionOptions = 
     (landmarkId) => sceneManager?.setFocusedLandmark(landmarkId),
   )
 
+  watch(() => simulation.dataset, dataset => sceneManager?.setSimulationData(dataset))
+  watch(() => [simulation.networkVisible, simulation.flightsVisible], () => sceneManager?.setSimulationVisibility(simulation.networkVisible, simulation.flightsVisible))
+  watch(() => usage.dataset, dataset => sceneManager?.setSoftwareUsage(dataset))
+  watch(() => usage.visible, visible => sceneManager?.setSoftwareUsageVisible(visible))
+  watch(() => usage.selectedId, id => {
+    if (!id) return
+    const distance = sceneManager?.focusUsageRegion(id)
+    if (distance !== null && distance !== undefined) store.cameraDistance = distance
+  })
+
   watch(locale, () => sceneManager?.refreshLocaleLabels())
   watch(getTransitionOptions, (options) => sceneManager?.setTransitionOptions(options), { deep: true })
 
@@ -307,6 +328,8 @@ export function useSceneManager(getTransitionOptions: () => TransitionOptions = 
 
   onUnmounted(() => {
     document.removeEventListener('visibilitychange', handleVisibilityChange)
+    usage.cancel()
+    simulation.cancel()
     recovery = null
     if (animationFrameId !== null) {
       cancelAnimationFrame(animationFrameId)
