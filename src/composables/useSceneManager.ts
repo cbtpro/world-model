@@ -7,6 +7,7 @@ import { bodyRegistry } from '@/config/bodies'
 import type { TransitionOptions } from '@/animation/paths'
 
 import { advanceSimulationDay } from '@/config/simulation'
+import { TimeRecovery } from '@/animation/TimeRecovery'
 
 export function useSceneManager(getTransitionOptions: () => TransitionOptions = () => ({})) {
   const containerRef = ref<HTMLElement | null>(null)
@@ -20,6 +21,11 @@ export function useSceneManager(getTransitionOptions: () => TransitionOptions = 
   let navigationSequence = 0
   let animationFrameId: number | null = null
   let previousFrameTime: number | null = null
+  let hiddenAt: number | null = null
+  let hiddenTargetDay = store.simulationDay
+  let hiddenSpeed = store.simulationSpeed
+  let hiddenRunning = false
+  let recovery: TimeRecovery | null = null
 
   function updateSelectedCoordinates(): void {
     const coordinates = sceneManager?.getBodyCoordinates(store.currentBodyId)
@@ -31,14 +37,78 @@ export function useSceneManager(getTransitionOptions: () => TransitionOptions = 
     }
   }
 
-  function animateTime(timestamp: number): void {
+  function advanceVisibleTime(timestamp: number): void {
     if (previousFrameTime !== null && store.isTimePlaying && !loadingPromise) {
-      const elapsedSeconds = Math.min(0.25, (timestamp - previousFrameTime) / 1000)
+      const elapsedSeconds = Math.max(0, (timestamp - previousFrameTime) / 1000)
       store.simulationDay = advanceSimulationDay(store.simulationDay, elapsedSeconds, store.simulationSpeed)
     }
+    if (recovery) {
+      store.simulationDay += recovery.step(timestamp)
+      if (recovery.complete) recovery = null
+    }
     previousFrameTime = timestamp
+  }
+
+  function animateTime(): void {
+    if (document.hidden) {
+      handleVisibilityChange()
+      return
+    }
+    advanceVisibleTime(Date.now())
     animationFrameId = requestAnimationFrame(animateTime)
   }
+
+  function accumulateHiddenTime(now: number): void {
+    if (hiddenAt !== null && hiddenRunning) {
+      hiddenTargetDay = advanceSimulationDay(hiddenTargetDay, Math.max(0, now - hiddenAt) / 1000, hiddenSpeed)
+    }
+    hiddenAt = now
+  }
+
+  function handleVisibilityChange(): void {
+    const now = Date.now()
+    if (document.hidden) {
+      if (hiddenAt !== null) return
+      advanceVisibleTime(now)
+      hiddenTargetDay = store.simulationDay + (recovery?.remaining ?? 0)
+      recovery = null
+      hiddenAt = now
+      hiddenSpeed = store.simulationSpeed
+      hiddenRunning = store.isTimePlaying && !store.modelLoading
+      if (animationFrameId !== null) cancelAnimationFrame(animationFrameId)
+      animationFrameId = null
+      sceneManager?.pauseRendering()
+    } else {
+      if (hiddenAt === null) return
+      accumulateHiddenTime(now)
+      const correction = hiddenTargetDay - store.simulationDay
+      hiddenAt = null
+      previousFrameTime = now
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        store.simulationDay = hiddenTargetDay
+      } else {
+        recovery = new TimeRecovery(correction, now)
+      }
+      sceneManager?.resumeRendering()
+      animationFrameId = requestAnimationFrame(animateTime)
+    }
+  }
+
+  watch(
+    [() => store.isTimePlaying, () => store.simulationSpeed, () => store.modelLoading],
+    () => {
+      const now = Date.now()
+      if (hiddenAt !== null) {
+        accumulateHiddenTime(now)
+        hiddenSpeed = store.simulationSpeed
+        hiddenRunning = store.isTimePlaying && !store.modelLoading
+      } else {
+        previousFrameTime = now
+        recovery = null
+      }
+    },
+    { flush: 'sync' },
+  )
 
   function createSceneBody(
     bodyId: string,
@@ -108,7 +178,9 @@ export function useSceneManager(getTransitionOptions: () => TransitionOptions = 
         if (loadingPromise === initialLoad) loadingPromise = null
       })
     loadingPromise = initialLoad
-    animationFrameId = requestAnimationFrame(animateTime)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    if (document.hidden) handleVisibilityChange()
+    else animationFrameId = requestAnimationFrame(animateTime)
   })
 
   watch(
@@ -234,6 +306,8 @@ export function useSceneManager(getTransitionOptions: () => TransitionOptions = 
   }
 
   onUnmounted(() => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+    recovery = null
     if (animationFrameId !== null) {
       cancelAnimationFrame(animationFrameId)
     }

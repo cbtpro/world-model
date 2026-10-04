@@ -44,6 +44,12 @@ export class Motion {
     }
   }
 
+  resumeAfterPause(pausedAt: number, now: number): void {
+    for (const animation of this.animations.values()) {
+      animation.start += Math.max(0, now - Math.max(pausedAt, animation.start))
+    }
+  }
+
   has(channel: string): boolean { return this.animations.has(channel) }
   cancel(channel: string): void { this.animations.delete(channel) }
   clear(): void { this.animations.clear() }

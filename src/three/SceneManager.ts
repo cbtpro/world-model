@@ -90,6 +90,7 @@ export class SceneManager {
   private orbitLines: THREE.LineLoop[] = []
   private focusedBodyWorldPosition: THREE.Vector3 | null = null
   private animationId: number | null = null
+  private renderingPausedAt: number | null = null
   private resizeObserver: ResizeObserver
   private landmarkLabels: LandmarkLabel[] = []
   private lunarSurfaceFeatures: THREE.Group | null = null
@@ -176,7 +177,8 @@ export class SceneManager {
   init(): void {
     this.container.appendChild(this.renderer.domElement)
     this.container.appendChild(this.cssRenderer.domElement)
-    this.startRenderLoop()
+    if (!document.hidden) this.startRenderLoop()
+    else this.pauseRendering()
   }
 
   async loadSystem(
@@ -744,6 +746,20 @@ export class SceneManager {
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(width, height)
     this.cssRenderer.setSize(width, height)
+  }
+
+  pauseRendering(): void {
+    this.renderingPausedAt ??= performance.now()
+    if (this.animationId !== null) cancelAnimationFrame(this.animationId)
+    this.animationId = null
+  }
+
+  resumeRendering(): void {
+    if (this.renderingPausedAt !== null) {
+      this.motion.resumeAfterPause(this.renderingPausedAt, performance.now())
+      this.renderingPausedAt = null
+    }
+    if (this.animationId === null) this.startRenderLoop()
   }
 
   private startRenderLoop(): void {

@@ -140,3 +140,41 @@ test('Chaikin 切角次数受限，配置可切换且算法产生不同的中途
     near(path(1).progress, 1)
   }
 })
+
+const { TimeRecovery } = load('TimeRecovery')
+
+test('后台时间补偿使用平滑曲线，每种倍率都精确补齐且无重复累计', () => {
+  for (const speed of [0.1, 1, 3600, 2592000, 8640000]) {
+    const correction = 300 * speed / 86400
+    const recovery = new TimeRecovery(correction, 1000, 900)
+    near(recovery.step(1000), 0)
+    let applied = 0
+    for (let now = 1015; now <= 1900; now += 15) applied += recovery.step(now)
+    assert.ok(Math.abs(applied - correction) < 1e-8)
+    assert.equal(recovery.complete, true)
+    near(recovery.step(2000), 0)
+  }
+})
+
+test('补偿中再次置于后台，可将剩余量和新增后台时间一起恢复', () => {
+  const first = new TimeRecovery(10, 0, 900)
+  const applied = first.step(450)
+  near(applied, 5)
+  near(first.remaining, 5)
+  const second = new TimeRecovery(first.remaining + 20, 1000, 900)
+  near(second.step(1900), 25)
+  near(applied + 25, 30)
+  const paused = new TimeRecovery(0, 0)
+  near(paused.step(900), 0)
+})
+
+test('场景动画在后台冻结，恢复后继续剩余进度', () => {
+  now = 0
+  const motion = new Motion()
+  let value = 0
+  motion.start('camera', t => { value = t }, { duration: 100 })
+  motion.update(50); near(value, 0.5)
+  motion.resumeAfterPause(50, 5050)
+  motion.update(5050); near(value, 0.5)
+  motion.update(5100); near(value, 1)
+})
